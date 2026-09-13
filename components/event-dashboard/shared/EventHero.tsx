@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { eventCountdown, displayEventTime, resolveEventSchedule } from "@/lib/time";
 import { Badge } from "@/components/ui/badge";
 import { edTokens } from "@/components/event-dashboard/theme/tokens";
+import AnimatedNumberCountdown from "@/components/room/AnimatedNumberCountdown";
 
 const subscribe = () => () => {};
 
@@ -87,7 +88,7 @@ export default function EventHero({
                     <p className="mt-1 text-[12px] text-slate-400">{display.secondary}</p>
                 )}
 
-                <div className="mt-6 grid w-full max-w-[520px] grid-cols-4 gap-2 sm:gap-3">
+                <div className="mt-6 flex w-full max-w-[620px] justify-center px-2 py-1">
                     {!countdown || countdown.label ? (
                         <div
                             className="rounded-full border px-4 py-2 text-sm font-medium text-slate-700"
@@ -99,22 +100,7 @@ export default function EventHero({
                             {countdown?.label ?? "Loading countdown"}
                         </div>
                     ) : (
-                        (["days", "hours", "minutes", "seconds"] as const).map((unit) => (
-                            <div
-                                key={unit}
-                                className="min-w-0 rounded-2xl border border-slate-200 bg-white px-2 py-2 text-center shadow-sm sm:px-4 sm:py-3"
-                            >
-                                <p
-                                    className="text-[clamp(1.25rem,5vw,1.875rem)] font-semibold tabular-nums tracking-tight"
-                                    style={{ color: edTokens.accent }}
-                                >
-                                    {String(countdown.parts?.[unit] ?? 0).padStart(2, "0")}
-                                </p>
-                                <p className="mt-1 truncate text-[8px] uppercase tracking-[0.1em] text-slate-400 sm:text-[10px] sm:tracking-[0.16em]">
-                                    {unit}
-                                </p>
-                            </div>
-                        ))
+                        <AnimatedNumberCountdown endDate={startDate} />
                     )}
                 </div>
             </div>
