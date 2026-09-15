@@ -325,7 +325,7 @@ export default function DashboardTopbar({ onMenuClick, recentEvents = [] }: Prop
 
                 <div className="relative z-10 flex items-center justify-end gap-2">
                     <UniversalSearch recentEvents={recentEvents} />
-                    <NotificationsBell variant="light" />
+                    <NotificationsBell />
                 </div>
             </div>
         </motion.header>

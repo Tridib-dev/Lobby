@@ -1,4 +1,4 @@
-import { DateTime } from "luxon";
+import { DateTime, IANAZone } from "luxon";
 
 export const DEFAULT_EVENT_TIMEZONE = "Asia/Kolkata";
 
@@ -25,7 +25,7 @@ export interface EmailEventDisplayTime {
 }
 
 export function isValidEventTimezone(timezone?: string): boolean {
-  return Boolean(timezone && DateTime.local().setZone(timezone).isValid);
+  return Boolean(timezone && IANAZone.isValidZone(timezone));
 }
 
 /**
@@ -41,8 +41,42 @@ export function getEventStartUTC(
 ): Date {
   const tz = timezone || DEFAULT_EVENT_TIMEZONE;
   const [datePart] = date.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const timeMatch = time.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
 
-  const dt = DateTime.fromISO(`${datePart}T${time}`, { zone: tz });
+  if (!timeMatch) {
+    throw new Error(
+      `getEventStartUTC: invalid time format — time="${time}" (expected HH:mm or h:mm AM/PM)`
+    );
+  }
+
+  const rawHour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  const second = Number(timeMatch[3] ?? "0");
+  const meridiem = timeMatch[4]?.toUpperCase();
+  const hour = meridiem
+    ? (rawHour % 12) + (meridiem === "PM" ? 12 : 0)
+    : rawHour;
+
+  if (
+    (meridiem ? rawHour < 1 || rawHour > 12 : rawHour > 23) ||
+    minute > 59 ||
+    second > 59
+  ) {
+    throw new Error(`getEventStartUTC: invalid time value — time="${time}"`);
+  }
+
+  // Supply every calendar/time field explicitly. This avoids Luxon consulting
+  // the current clock while Next.js prerenders client components.
+  const dt = DateTime.fromMillis(0, { zone: tz }).set({
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    millisecond: 0,
+  });
 
   if (!dt.isValid) {
     throw new Error(

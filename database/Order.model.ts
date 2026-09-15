@@ -50,7 +50,6 @@ const orderSchema = new Schema<IOrder>(
 );
 
 orderSchema.index({ clerkId: 1, eventId: 1 });
-orderSchema.index({ razorpayOrderId: 1 });
 
 const Order =
     (models.Order as OrderModel | undefined) ??

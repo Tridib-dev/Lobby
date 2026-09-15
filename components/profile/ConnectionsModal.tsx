@@ -208,7 +208,7 @@ export default function ConnectionsModal({
         try {
             const result = await toggleFollow(clerkId);
             if (result.success) {
-                updateConnectionFollowState(clerkId, result.following);
+                updateConnectionFollowState(clerkId, result.following ?? false);
             } else {
                 toast.error("Unable to update follow status.");
             }

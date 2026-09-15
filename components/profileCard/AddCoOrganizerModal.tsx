@@ -153,15 +153,6 @@ export function AddCoOrganizerModal({
     );
   }, [connections, query]);
 
-  function setBusy(clerkId: string, busy: boolean) {
-    setBusyClerkIds((current) => {
-      const next = new Set(current);
-      if (busy) next.add(clerkId);
-      else next.delete(clerkId);
-      return next;
-    });
-  }
-
   async function handleAction(connection: ProfileConnection) {
     if (busyClerkIds.has(connection.clerkId)) return;
 

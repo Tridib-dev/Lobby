@@ -204,7 +204,7 @@ export function RevenueBarChart({
                 <Tooltip
                     contentStyle={tooltipStyle}
                     cursor={{ fill: "rgba(51,43,224,0.06)" }}
-                    formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Revenue"]}
+                    formatter={(v) => [`₹${Number(v ?? 0).toLocaleString("en-IN")}`, "Revenue"]}
                 />
                 <Bar dataKey="revenue" fill="#332be0" radius={[6, 6, 0, 0]} maxBarSize={36} />
             </BarChart>
@@ -248,7 +248,7 @@ export function MonthlyBarChart({
                 <Tooltip
                     contentStyle={tooltipStyle}
                     cursor={{ fill: "rgba(51,43,224,0.06)" }}
-                    formatter={(v: number) => [v.toLocaleString("en-IN"), label]}
+                    formatter={(v) => [Number(v ?? 0).toLocaleString("en-IN"), label]}
                 />
                 <Bar dataKey="count" name={label} fill={color} radius={[8, 8, 0, 0]} maxBarSize={28} />
             </BarChart>
@@ -276,7 +276,7 @@ export function ModeDonutChart({
                     <PieChart>
                         <Tooltip
                             contentStyle={tooltipStyle}
-                            formatter={(v: number, name: string) => [v.toLocaleString("en-IN"), name]}
+                            formatter={(v, name) => [Number(v ?? 0).toLocaleString("en-IN"), String(name ?? "")]}
                         />
                         <Pie
                             data={sorted}

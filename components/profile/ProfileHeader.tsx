@@ -170,7 +170,7 @@ export default function ProfileHeader({
                         <button
                             key={stat.label}
                             type="button"
-                            onClick={() => openConnections(stat.label)}
+                            onClick={() => openConnections(stat.label === "followers" ? "followers" : "following")}
                             className="text-white/40 transition-colors hover:text-white/70"
                         >
                             <span className="text-white/90 font-semibold mr-1">{stat.value}</span>

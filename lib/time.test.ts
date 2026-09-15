@@ -7,6 +7,11 @@ describe("getEventStartUTC", () => {
     expect(result.toISOString()).toBe("2026-12-05T13:30:00.000Z");
   });
 
+  it("preserves legacy 12-hour event times", () => {
+    const result = getEventStartUTC("2026-12-05", "7:00 PM", "Asia/Kolkata");
+    expect(result.toISOString()).toBe("2026-12-05T13:30:00.000Z");
+  });
+
   it("converts a Nepal event (+5:45, non-hour offset) correctly", () => {
     const result = getEventStartUTC("2026-12-05", "19:00", "Asia/Kathmandu");
     expect(result.toISOString()).toBe("2026-12-05T13:15:00.000Z");

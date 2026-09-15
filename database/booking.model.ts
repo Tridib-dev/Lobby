@@ -69,8 +69,8 @@ bookingSchema.pre("save", async function validateBooking(this: BookingDocument) 
     if (this.isModified("eventId")) {
         const session = this.$session();
         const eventExists = session
-            ? await Event.exists({ _id: this.eventId }).session(session)
-            : await Event.exists({ _id: this.eventId });
+            ? await Event.exists({ _id: this.eventId.toString() }).session(session)
+            : await Event.exists({ _id: this.eventId.toString() });
 
         if (!eventExists) {
             throw new Error("Cannot create booking: referenced event does not exist.");
