@@ -16,6 +16,14 @@ export interface ResolvedEventSchedule {
   isLegacy: boolean;
 }
 
+export interface EmailEventDisplayTime {
+  primaryLabel: string;
+  primary: string;
+  secondaryLabel?: string;
+  secondary?: string;
+  isLegacy: boolean;
+}
+
 export function isValidEventTimezone(timezone?: string): boolean {
   return Boolean(timezone && DateTime.local().setZone(timezone).isValid);
 }
@@ -185,6 +193,55 @@ export function getEventDisplayTime(
   const { instant, timezone } = resolveEventSchedule(event);
   const effectiveMode = mode ?? event.mode;
   return displayEventTime(instant, timezone, viewerTimezone, effectiveMode);
+}
+
+function formatZonedEventTime(instant: Date, timezone: string): string {
+  const dateTime = DateTime.fromJSDate(instant, { zone: "utc" }).setZone(timezone);
+  return `${dateTime.toFormat("EEEE, d MMMM yyyy · h:mm a")} ${dateTime.offsetNameShort}`;
+}
+
+/**
+ * Formats a transactional-email schedule without ever treating the server's
+ * timezone as the recipient's timezone. Email is rendered on the server, so a
+ * recipient timezone must be supplied explicitly to show a local online time.
+ */
+export function getEmailEventDisplayTime(
+  event: EventScheduleInput,
+  recipientTimezone?: string
+): EmailEventDisplayTime {
+  const { instant, timezone, isLegacy } = resolveEventSchedule(event);
+  const eventTime = formatZonedEventTime(instant, timezone);
+  const viewerTimezone = isValidEventTimezone(recipientTimezone) ? recipientTimezone : undefined;
+  const isOnline = normalizeEventModeInline(event.mode) === "online";
+
+  if (!viewerTimezone) {
+    return {
+      primaryLabel: isOnline ? "Event time (host timezone)" : "Event time",
+      primary: eventTime,
+      isLegacy,
+    };
+  }
+
+  const viewerTime = formatZonedEventTime(instant, viewerTimezone);
+  const sameZone = isSameRealZone(timezone, viewerTimezone, instant);
+
+  if (isOnline) {
+    return {
+      primaryLabel: "Your local time",
+      primary: viewerTime,
+      secondaryLabel: sameZone ? undefined : "Host time",
+      secondary: sameZone ? undefined : eventTime,
+      isLegacy,
+    };
+  }
+
+  return {
+    primaryLabel: "Event time",
+    primary: eventTime,
+    secondaryLabel: sameZone ? undefined : "Your local time",
+    secondary: sameZone ? undefined : viewerTime,
+    isLegacy,
+  };
 }
 
 /** Formats an absolute audit timestamp in the current viewer's local zone. */

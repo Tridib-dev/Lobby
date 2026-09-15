@@ -2,6 +2,7 @@ import { Section, Text } from "@react-email/components";
 import { render } from "@react-email/render";
 import { EmailWrapper } from "../wrapper";
 import { BASE_URL, theme } from "../theme";
+import { getEmailEventDisplayTime } from "@/lib/time";
 
 export type OrderReceiptData = {
     to: string;
@@ -13,31 +14,11 @@ export type OrderReceiptData = {
     paymentId: string;
     amount: number;
     eventSlug: string;
+    mode?: string;
+    timezone?: string;
+    startAtUTC?: string;
+    recipientTimezone?: string;
 };
-
-function formatDate(dateStr: string): string {
-    try {
-        return new Date(dateStr).toLocaleDateString("en-IN", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-        });
-    } catch {
-        return dateStr;
-    }
-}
-
-function formatTime(timeStr: string): string {
-    try {
-        const [h, m] = timeStr.split(":").map(Number);
-        const period = h >= 12 ? "PM" : "AM";
-        const hour = h % 12 || 12;
-        return `${hour}:${String(m).padStart(2, "0")} ${period}`;
-    } catch {
-        return timeStr;
-    }
-}
 
 export function subject(eventTitle: string): string {
     return `Payment receipt for "${eventTitle}"`;
@@ -46,6 +27,13 @@ export function subject(eventTitle: string): string {
 function OrderReceiptEmail(data: OrderReceiptData) {
     const eventUrl = `${BASE_URL}/events/${data.eventSlug}`;
     const ticketUrl = `${BASE_URL}/dashboard/attended`;
+    const schedule = getEmailEventDisplayTime({
+        date: data.eventDate,
+        time: data.eventTime,
+        timezone: data.timezone,
+        startAtUTC: data.startAtUTC,
+        mode: data.mode,
+    }, data.recipientTimezone);
 
     return (
         <EmailWrapper
@@ -113,17 +101,21 @@ function OrderReceiptEmail(data: OrderReceiptData) {
                 </Text>
 
                 <Text style={{ margin: "0 0 4px", fontSize: "12px", color: theme.colors.textSecondary }}>
-                    Date
+                    {schedule.primaryLabel}
                 </Text>
-                <Text style={{ margin: "0 0 14px", fontSize: "14px", color: theme.colors.textPrimary }}>
-                    {formatDate(data.eventDate)}
+                <Text style={{ margin: "0 0 10px", fontSize: "14px", color: theme.colors.textPrimary }}>
+                    {schedule.primary}
                 </Text>
-                <Text style={{ margin: "0 0 4px", fontSize: "12px", color: theme.colors.textSecondary }}>
-                    Time
-                </Text>
-                <Text style={{ margin: "0 0 14px", fontSize: "14px", color: theme.colors.textPrimary }}>
-                    {formatTime(data.eventTime)}
-                </Text>
+                {schedule.secondary && schedule.secondaryLabel && (
+                    <>
+                        <Text style={{ margin: "0 0 4px", fontSize: "12px", color: theme.colors.textSecondary }}>
+                            {schedule.secondaryLabel}
+                        </Text>
+                        <Text style={{ margin: "0 0 14px", fontSize: "14px", color: theme.colors.textPrimary }}>
+                            {schedule.secondary}
+                        </Text>
+                    </>
+                )}
                 <Text style={{ margin: "0 0 4px", fontSize: "12px", color: theme.colors.textSecondary }}>
                     Location
                 </Text>

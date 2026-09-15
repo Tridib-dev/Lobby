@@ -7,6 +7,7 @@ import { Booking } from "@/database/booking.model";
 import { Order } from "@/database/Order.model";
 import { Event } from "@/database/event.model";
 import { sendBookingConfirmation } from "@/lib/email/services/booking.email";
+import { isValidEventTimezone } from "@/lib/time";
 
 type EventEmailDoc = {
     title?: string;
@@ -14,6 +15,9 @@ type EventEmailDoc = {
     time?: string;
     location?: string;
     slug?: string;
+    mode?: string;
+    timezone?: string;
+    startAtUTC?: string | Date;
 };
 
 // ─── Create Booking ───────────────────────────────────────────────────────────
@@ -23,9 +27,11 @@ type EventEmailDoc = {
 export const CreateBooking = async ({
     eventId,
     slug,
+    recipientTimezone,
 }: {
     eventId: string;
     slug: string;
+    recipientTimezone?: string;
 }) => {
     try {
         const { userId } = await auth();
@@ -52,7 +58,7 @@ export const CreateBooking = async ({
         
         // Fetch event details for email — fire and forget, never blocks booking
         const eventDoc = await Event.findById(eventId)
-            .select("title date time location slug startAtUTC timezone")
+            .select("title date time location slug mode startAtUTC timezone")
             .lean<EventEmailDoc>();
         
         await sendBookingConfirmation({
@@ -64,6 +70,10 @@ export const CreateBooking = async ({
             ticketId: booking._id.toString(),
             price: 0,
             eventSlug: eventDoc?.slug ?? slug,
+            mode: eventDoc?.mode,
+            timezone: eventDoc?.timezone,
+            startAtUTC: eventDoc?.startAtUTC instanceof Date ? eventDoc.startAtUTC.toISOString() : eventDoc?.startAtUTC,
+            recipientTimezone: isValidEventTimezone(recipientTimezone) ? recipientTimezone : undefined,
         });
         
         return { success: true };

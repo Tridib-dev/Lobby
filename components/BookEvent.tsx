@@ -171,7 +171,8 @@ const StickyBookingBar = ({
             return;
         }
         setIsBooking(true);
-        const result = await CreateBooking({ eventId, slug });
+        const recipientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const result = await CreateBooking({ eventId, slug, recipientTimezone });
         if (result.success) {
             setHasBooked(true);
             setTicketModalOpen(true);
@@ -241,6 +242,7 @@ const StickyBookingBar = ({
                     body: JSON.stringify({
                         ...response,
                         eventId,
+                        recipientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                         userEmail: user?.emailAddresses?.[0]?.emailAddress ?? "",
                     }),
                 });

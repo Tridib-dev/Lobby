@@ -10,6 +10,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 import Razorpay from "razorpay";
 import { isValidObjectId } from "mongoose";
 import { paiseToRupees, rupeesToPaise } from "@/lib/payments/money";
+import { isValidEventTimezone } from "@/lib/time";
 
 type EventEmailDoc = {
     price?: number;
@@ -19,6 +20,9 @@ type EventEmailDoc = {
     date?: string;
     time?: string;
     location?: string;
+    mode?: string;
+    timezone?: string;
+    startAtUTC?: string | Date;
 };
 
 const razorpay = new Razorpay({
@@ -44,6 +48,7 @@ export async function POST(req: NextRequest) {
             razorpay_payment_id?: unknown;
             razorpay_signature?: unknown;
             eventId?: unknown;
+            recipientTimezone?: unknown;
         };
         const razorpay_order_id = typeof verificationPayload.razorpay_order_id === "string" ? verificationPayload.razorpay_order_id.trim() : "";
         const razorpay_payment_id = typeof verificationPayload.razorpay_payment_id === "string" ? verificationPayload.razorpay_payment_id.trim() : "";
@@ -72,7 +77,7 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const eventDoc = await Event.findById(eventId)
-            .select("price title slug date time location")
+            .select("price title slug date time location mode timezone startAtUTC")
             .lean<EventEmailDoc | null>();
         if (!eventDoc) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
@@ -111,7 +116,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: result.error }, { status: 500 });
         }
 
-        // Send confirmation email — fire and forget
+        const recipientTimezone = typeof verificationPayload.recipientTimezone === "string"
+            ? verificationPayload.recipientTimezone
+            : undefined;
+
+        // Send confirmation email — a failure is contained by the email service.
         if (userEmail) {
             await sendOrderReceipt({
                 to: userEmail,
@@ -123,6 +132,10 @@ export async function POST(req: NextRequest) {
                 paymentId: razorpay_payment_id,
                 amount: paiseToRupees(amountPaise),
                 eventSlug: eventDoc.slug,
+                mode: eventDoc?.mode,
+                timezone: eventDoc?.timezone,
+                startAtUTC: eventDoc?.startAtUTC instanceof Date ? eventDoc.startAtUTC.toISOString() : eventDoc?.startAtUTC,
+                recipientTimezone: isValidEventTimezone(recipientTimezone) ? recipientTimezone : undefined,
             });
         }
         
