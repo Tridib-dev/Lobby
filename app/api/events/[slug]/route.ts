@@ -58,6 +58,9 @@ const toEventPayload = (eventDocument: HydratedDocument<IEvent>): EventPayload =
   citySlug: eventDocument.citySlug,
   categorySlug: eventDocument.categorySlug,
   price: eventDocument.price,           // ← Add this
+  capacity: eventDocument.capacity,
+  confirmedRegistrationCount: eventDocument.confirmedRegistrationCount ?? 0,
+  reservedRegistrationCount: eventDocument.reservedRegistrationCount ?? 0,
   sponsors: eventDocument.sponsors || [], // ← Add this
   createdAt: eventDocument.createdAt,
   updatedAt: eventDocument.updatedAt,

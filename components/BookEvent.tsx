@@ -70,6 +70,9 @@ interface StickyBookingBarProps {
     eventDate?: string;
     eventTime?: string;
     timezone?: string;
+    capacity?: number | null;
+    confirmedRegistrationCount?: number;
+    reservedRegistrationCount?: number;
 }
 
 const StickyBookingBar = ({
@@ -85,6 +88,9 @@ const StickyBookingBar = ({
     eventDate = "",
     eventTime = "",
     timezone,
+    capacity = null,
+    confirmedRegistrationCount = 0,
+    reservedRegistrationCount = 0,
 }: StickyBookingBarProps) => {
     const { isSignedIn, user } = useUser();
     const [isSaved, setIsSaved] = useState(false);
@@ -94,6 +100,8 @@ const StickyBookingBar = ({
     const [ticketModalOpen, setTicketModalOpen] = useState(false);
 
     const isPaid = price > 0;
+    const remaining = capacity === null ? null : Math.max(0, capacity - confirmedRegistrationCount - reservedRegistrationCount);
+    const isSoldOut = remaining === 0;
     const shortDesc =
         description.length > 85 ? description.substring(0, 85) + "..." : description;
     const bookedAt = new Date().toISOString();
@@ -171,6 +179,11 @@ const StickyBookingBar = ({
             return;
         }
         setIsBooking(true);
+        if (isSoldOut) {
+            toast.error("This event is sold out.");
+            setIsBooking(false);
+            return;
+        }
         const recipientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         const result = await CreateBooking({ eventId, slug, recipientTimezone });
         if (result.success) {
@@ -192,6 +205,12 @@ const StickyBookingBar = ({
 
         setIsBooking(true);
 
+        if (isSoldOut) {
+            toast.error("This event is sold out.");
+            setIsBooking(false);
+            return;
+        }
+
         // 1. Load Razorpay SDK
         const loaded = await loadRazorpayScript();
         if (!loaded) {
@@ -208,7 +227,8 @@ const StickyBookingBar = ({
         });
 
         if (!res.ok) {
-            toast.error("Could not initiate payment. Please try again.");
+            const payload = await res.json().catch(() => ({}));
+            toast.error(payload.error || "Could not initiate payment. Please try again.");
             setIsBooking(false);
             return;
         }
@@ -283,6 +303,11 @@ const StickyBookingBar = ({
                                         ₹{price.toLocaleString("en-IN")}
                                     </div>
                                 )}
+                                {remaining !== null && (
+                                    <div className={`text-xs font-medium ${isSoldOut ? "text-rose-400" : "text-cyan-300"}`}>
+                                        {isSoldOut ? "Sold out" : `${remaining} spot${remaining === 1 ? "" : "s"} left`}
+                                    </div>
+                                )}
                             </div>
                             <p className="font-semibold text-white text-[17px] leading-tight truncate">
                                 {title}
@@ -324,12 +349,14 @@ const StickyBookingBar = ({
                             ) : (
                                 <Button
                                     onClick={handleBook}
-                                    disabled={isBooking}
+                                    disabled={isBooking || isSoldOut}
                                     className="group inline-flex h-auto min-h-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 leading-none shadow-sm backdrop-blur-md transform transition-all duration-200 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 border-white/80 bg-white/90 text-zinc-900 hover:-translate-y-0.5 hover:shadow-md hover:bg-white disabled:translate-y-0 disabled:hover:bg-white disabled:hover:shadow-sm disabled:opacity-70"
                                 >
                                     <span className="relative z-10 flex items-center gap-2">
                                         {isBooking ? (
                                             isPaid ? "Opening payment…" : "Booking…"
+                                        ) : isSoldOut ? (
+                                            "Sold out"
                                         ) : isPaid ? (
                                             `Book • ₹${price.toLocaleString("en-IN")}`
                                         ) : (

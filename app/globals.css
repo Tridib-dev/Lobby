@@ -178,6 +178,13 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
 }
 
 @utility flex-center {
@@ -257,6 +264,16 @@
     @apply bg-background text-foreground;
     background: #09090b;
     position : relative;
+  }
+
+  /* The create-event wizard is a light-themed exception to the app's dark
+     shell. When it's mounted (see CreateEventWizard.tsx), it tags <body>
+     with this attribute so body's own background matches the wizard instead
+     of the app-wide dark background — this is what shows through in the
+     sliver a dialog's scroll-lock briefly reserves on the right edge, so it
+     needs to be the right color rather than something we fight in JS. */
+  body[data-create-event-wizard="true"] {
+    background: #fafafa;
   }
 
   main:not([data-dashboard-main]):not([data-discover-main]) {

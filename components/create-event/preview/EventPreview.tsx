@@ -82,6 +82,7 @@ const EventPreview = ({ draft }: { draft: EventDraft }) => {
           <span>📅 {formatDate(draft.date)}{draft.time ? ` · ${draft.time}` : ""}</span>
           <span>📍 {draft.venue ? `${draft.venue}, ${draft.location.city || "City TBD"}` : "Location TBD"}</span>
           <span>{draft.mode || "Mode TBD"}</span>
+          <span>{draft.hasCapacityLimit ? `${draft.capacity ?? 0} participant places` : "Unlimited registrations"}</span>
         </div>
 
         {draft.tags.length > 0 && (

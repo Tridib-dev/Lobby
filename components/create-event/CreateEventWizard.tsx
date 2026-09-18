@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import Step4Details from "./steps/Step4Details";
 import Step5Tickets from "./steps/Step5Tickets";
 import Step6Organizer from "./steps/Step6Organizer";
 import Step7Review from "./steps/Step7Review";
+import EventCancellationModal from "./fields/EventCancellation";
 
 const stepIndex = (key: WizardStepKey) => WIZARD_STEPS.findIndex((s) => s.key === key);
 
@@ -43,6 +44,9 @@ fd.append("time", draft.time);
    fd.append("mode", draft.mode);
   fd.append("organizer", draft.organizer);
   fd.append("price", String(draft.isFree ? 0 : draft.price));
+  if (draft.hasCapacityLimit && draft.capacity) {
+    fd.append("capacity", String(draft.capacity));
+  }
   const validSponsors = draft.sponsors.filter((s) => s.name.trim() && s.website.trim());
   fd.append("sponsors", JSON.stringify(validSponsors.map((s) => ({ name: s.name, website: s.website }))));
   fd.append("agenda", JSON.stringify(draft.agenda.map((a) => ({ startTime: a.startTime, endTime: a.endTime, keynote: a.keynote }))));
@@ -63,11 +67,20 @@ draft.organizerEmails.forEach((email) => fd.append("organizerEmails", email));
 };
 
 const CreateEventWizard = () => {
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+
   const router = useRouter();
   const { user } = useUser();
   const { draft, updateDraft, resetDraft, isHydrated } = useEventDraft();
   const [currentStep, setCurrentStep] = useState<WizardStepKey>("spark");
   const [isPublishing, setIsPublishing] = useState(false);
+
+  useEffect(() => {
+    document.body.setAttribute("data-create-event-wizard", "true");
+    return () => {
+      document.body.removeAttribute("data-create-event-wizard");
+    };
+  }, []);
 
   if (!isHydrated) {
     return <WizardSkeleton />;
@@ -84,9 +97,12 @@ const CreateEventWizard = () => {
   }, {} as Record<WizardStepKey, StepStatus>);
 
   const handleClose = () => {
-    if (window.confirm("Leave event creation? Your progress is saved, but you'll need to review any unfinished step.")) {
-      router.back();
-    }
+    setIsConfirmOpen(true);
+  };
+
+  const handleConfirmClose = () => {
+    router.back();
+    setIsConfirmOpen(false);
   };
 
   const handleStepClick = (step: WizardStepKey) => {
@@ -192,6 +208,13 @@ const CreateEventWizard = () => {
       onStepClick={handleStepClick}
     >
       {renderStep()}
+      <EventCancellationModal
+        open={isConfirmOpen}
+        onOpenChange={setIsConfirmOpen}
+        onConfirm={handleConfirmClose}
+        title="Leave event creation?"
+        description="Your progress is saved, but you'll need to review any unfinished step."
+      />
       <StepNav
         onBack={handleBack}
         onContinue={handleContinue}

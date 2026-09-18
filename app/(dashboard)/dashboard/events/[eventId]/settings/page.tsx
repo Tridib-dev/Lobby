@@ -116,6 +116,7 @@ export default async function EventSettingsPage({
                 <SettingsSection title="Tickets">
                     <Field label="Price" value={settings.isFree ? "Free" : `₹${settings.price.toLocaleString("en-IN")}`} />
                     <Field label="Type" value={settings.isFree ? "Free event" : "Paid event"} />
+                    <Field label="Registration limit" value={settings.capacity === null ? "Unlimited" : `${settings.capacity.toLocaleString("en-IN")} participants`} />
                 </SettingsSection>
             </div>
 

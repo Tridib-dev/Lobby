@@ -1,39 +1,34 @@
-"use client"
+"use client";
 
-import { useState, type ReactNode } from "react"
-import { motion } from "framer-motion"
-import { Check } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { SkeletonBlock, SkeletonCircle } from "./Skeleton"
-import type { IUser } from "@/database/User.model" // matches the rest of this codebase's model import convention
+import { useState, type ReactNode } from "react";
+import { motion } from "framer-motion";
+import { Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  SkeletonBlock,
+  SkeletonCircle,
+} from "./Skeleton";
+import type { IUser } from "@/database/User.model";
 
-/**
- * Minimum fields every row flavor needs — deliberately not the full IUser.
- * Anything relational (follow state, event role, pending/sent state) is
- * NOT part of this type: it's context-specific and passed in per flavor,
- * not read off the user document. See ProfileRowShell's `badge`/`trailing`
- * slots below.
- */
-export type ProfileRowUser = Pick<IUser, "clerkId" | "photo" | "firstName" | "lastName" | "username"> & {
-  isVerified?: boolean
-}
+export type ProfileRowUser = Pick<
+  IUser,
+  | "clerkId"
+  | "photo"
+  | "firstName"
+  | "lastName"
+  | "username"
+> & {
+  isVerified?: boolean;
+};
 
 export interface ProfileRowShellProps {
-  user: ProfileRowUser
-  /** Small pill near the name — e.g. an event-scoped role ("Organizer"). */
-  badge?: ReactNode
-  /** Right-aligned action area — a button, a state pill, whatever the flavor needs. */
-  trailing?: ReactNode
-  onClick?: () => void
-  className?: string
+  user: ProfileRowUser;
+  badge?: ReactNode;
+  trailing?: ReactNode;
+  onClick?: () => void;
+  className?: string;
 }
 
-/**
- * The dumb shared base: avatar, name, username, and two slots. Knows
- * nothing about co-organizers, sharing, or following — flavor components
- * own that. Keep this the only place row layout/spacing lives so every
- * list in the app stays visually consistent.
- */
 export function ProfileRowShell({
   user,
   badge,
@@ -41,64 +36,96 @@ export function ProfileRowShell({
   onClick,
   className,
 }: ProfileRowShellProps) {
-  const fullName = `${user.firstName} ${user.lastName}`.trim()
+  const fullName =
+    `${user.firstName} ${user.lastName}`.trim();
 
   return (
     <div
       data-slot="profile-row"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 rounded-2xl border border-border/20 bg-card px-3 py-2.5 transition-colors duration-150",
-        onClick && "cursor-pointer hover:bg-muted/50",
+        [
+          "group flex w-full items-center gap-3",
+          "rounded-2xl border border-slate-200",
+          "bg-white px-3 py-2.5",
+          "shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+          "transition-all duration-200",
+        ].join(" "),
+        onClick &&
+          [
+            "cursor-pointer",
+            "hover:-translate-y-[1px]",
+            "hover:border-slate-300",
+            "hover:bg-slate-50",
+            "hover:shadow-md",
+          ].join(" "),
         className
       )}
     >
+      {/* Avatar */}
       <div className="relative shrink-0">
         <img
           src={user.photo}
           alt={fullName}
-          className="w-10 h-10 rounded-full object-cover ring-2 ring-card"
+          className="h-10 w-10 rounded-full object-cover ring-2 ring-white shadow-sm"
         />
+
         {user.isVerified && (
-          <div className="absolute bottom-0 right-0 flex items-center justify-center w-3.5 h-3.5 rounded-full bg-green-500 text-white ring-2 ring-card">
-            <Check className="w-2 h-2" />
+          <div className="absolute bottom-0 right-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-white">
+            <Check className="h-2 w-2" />
           </div>
         )}
       </div>
 
+      {/* Identity */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <p className="truncate text-sm font-semibold text-[#2f3037] leading-tight">{fullName}</p>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="truncate text-sm font-semibold leading-tight text-slate-900">
+            {fullName}
+          </p>
+
           {badge}
         </div>
-        <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
+
+        <p className="truncate text-xs text-slate-500">
+          @{user.username}
+        </p>
       </div>
 
-      {trailing && <div className="shrink-0">{trailing}</div>}
+      {/* Action */}
+      {trailing && (
+        <div className="shrink-0">
+          {trailing}
+        </div>
+      )}
     </div>
-  )
+  );
 }
 
-export function ProfileRowSkeleton({ className }: { className?: string }) {
+export function ProfileRowSkeleton({
+  className,
+}: {
+  className?: string;
+}) {
   return (
     <div
       data-slot="profile-row-skeleton"
       className={cn(
-        "flex w-full items-center gap-3 rounded-2xl border border-border/20 bg-card px-3 py-2.5",
+        "flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm",
         className
       )}
     >
-      <SkeletonCircle className="w-10 h-10 ring-2 ring-card shrink-0" />
+      <SkeletonCircle className="h-10 w-10 shrink-0 ring-2 ring-white" />
+
       <div className="min-w-0 flex-1 space-y-1.5">
         <SkeletonBlock className="h-3.5 w-28 rounded-full" />
         <SkeletonBlock className="h-3 w-20 rounded-full" />
       </div>
-      <SkeletonBlock className="h-8 w-20 rounded-xl shrink-0" />
-    </div>
-  )
-}
 
-// --- Shared trailing-button styling, matching ProfileCard's Follow button --
+      <SkeletonBlock className="h-8 w-20 shrink-0 rounded-xl" />
+    </div>
+  );
+}
 
 function RowActionButton({
   active,
@@ -106,44 +133,65 @@ function RowActionButton({
   onClick,
   children,
 }: {
-  active: boolean
-  disabled?: boolean
-  onClick?: () => void
-  children: ReactNode
+  active: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+  children: ReactNode;
 }) {
   return (
     <motion.button
       type="button"
       onClick={(e) => {
-        e.stopPropagation()
-        onClick?.()
+        e.stopPropagation();
+        onClick?.();
       }}
       disabled={disabled}
-      whileHover={!disabled ? { scale: 1.03 } : undefined}
-      whileTap={!disabled ? { scale: 0.97 } : undefined}
+      whileHover={
+        !disabled ? { scale: 1.03 } : undefined
+      }
+      whileTap={
+        !disabled ? { scale: 0.97 } : undefined
+      }
       className={cn(
-        "rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors duration-150",
-        "disabled:opacity-60",
+        "rounded-full border px-3.5 py-1.5 text-xs font-semibold",
+        "transition-all duration-150",
+        "disabled:cursor-not-allowed disabled:opacity-60",
+
         active
-          ? "border-white/10 bg-white/[0.05] text-white/55 hover:bg-white/[0.08]"
-          : "border-[#332be0]/30 bg-[#332be0] text-white shadow-[0_8px_20px_rgba(51,43,224,0.22)] hover:bg-[#2b24c8]"
+          ? [
+              "border-slate-200",
+              "bg-slate-50",
+              "text-slate-600",
+              "shadow-sm",
+              "hover:bg-slate-100",
+            ].join(" ")
+          : [
+              "border-indigo-600",
+              "bg-indigo-600",
+              "text-white",
+              "shadow-[0_8px_20px_rgba(79,70,229,0.24)]",
+              "hover:bg-indigo-700",
+              "hover:shadow-[0_10px_24px_rgba(79,70,229,0.30)]",
+            ].join(" ")
       )}
     >
       {children}
     </motion.button>
-  )
+  );
 }
 
-// --- Flavor 1: adding/removing a co-organizer candidate ---------------------
+/* -------------------------------------------------------------------------- */
+/* Co-organizer                                                               */
+/* -------------------------------------------------------------------------- */
 
 export interface CoOrganizerCandidateRowProps {
-  user: ProfileRowUser
-  state: "none" | "pending" | "active" | "denied"
-  pending?: boolean
-  onAdd: () => void
-  onRemove: () => void
-  onClick?: () => void
-  className?: string
+  user: ProfileRowUser;
+  state: "none" | "pending" | "active" | "denied";
+  pending?: boolean;
+  onAdd: () => void;
+  onRemove: () => void;
+  onClick?: () => void;
+  className?: string;
 }
 
 export function CoOrganizerCandidateRow({
@@ -155,7 +203,8 @@ export function CoOrganizerCandidateRow({
   onClick,
   className,
 }: CoOrganizerCandidateRowProps) {
-  const isCoOrganizer = state === "pending" || state === "active"
+  const isCoOrganizer =
+    state === "pending" || state === "active";
 
   return (
     <ProfileRowShell
@@ -163,49 +212,74 @@ export function CoOrganizerCandidateRow({
       onClick={onClick}
       badge={
         state === "pending" ? (
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/55">
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
             Pending
           </span>
         ) : state === "active" ? (
-          <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
             Active
           </span>
         ) : state === "denied" ? (
-          <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-300">
+          <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700">
             Denied
           </span>
         ) : null
       }
       className={className}
       trailing={
-        <RowActionButton active={isCoOrganizer} disabled={pending} onClick={state === "none" || state === "denied" ? onAdd : onRemove}>
-          {pending ? "..." : state === "none" || state === "denied" ? "Invite" : "Remove"}
+        <RowActionButton
+          active={isCoOrganizer}
+          disabled={pending}
+          onClick={
+            state === "none" ||
+            state === "denied"
+              ? onAdd
+              : onRemove
+          }
+        >
+          {pending
+            ? "..."
+            : state === "none" ||
+                state === "denied"
+              ? "Invite"
+              : "Remove"}
         </RowActionButton>
       }
     />
-  )
+  );
 }
 
-// --- Flavor 2: sharing an event to a follower --------------------------------
+/* -------------------------------------------------------------------------- */
+/* Share to follower                                                          */
+/* -------------------------------------------------------------------------- */
 
 export interface ShareToFollowerRowProps {
-  user: ProfileRowUser
-  onSend: () => Promise<void> | void
-  onClick?: () => void
-  className?: string
+  user: ProfileRowUser;
+  onSend: () => Promise<void> | void;
+  onClick?: () => void;
+  className?: string;
 }
 
-export function ShareToFollowerRow({ user, onSend, onClick, className }: ShareToFollowerRowProps) {
-  const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle")
+export function ShareToFollowerRow({
+  user,
+  onSend,
+  onClick,
+  className,
+}: ShareToFollowerRowProps) {
+  const [status, setStatus] = useState<
+    "idle" | "sending" | "sent"
+  >("idle");
 
   async function handleSend() {
-    if (status !== "idle") return
-    setStatus("sending")
+    if (status !== "idle") return;
+
+    setStatus("sending");
+
     try {
-      await onSend()
-      setStatus("sent")
+      await onSend();
+      setStatus("sent");
     } catch {
-      setStatus("idle") // let them retry on failure
+      setStatus("idle");
     }
   }
 
@@ -215,24 +289,34 @@ export function ShareToFollowerRow({ user, onSend, onClick, className }: ShareTo
       onClick={onClick}
       className={className}
       trailing={
-        <RowActionButton active={status === "sent"} disabled={status !== "idle"} onClick={handleSend}>
-          {status === "sending" ? "..." : status === "sent" ? "Sent" : "Send"}
+        <RowActionButton
+          active={status === "sent"}
+          disabled={status !== "idle"}
+          onClick={handleSend}
+        >
+          {status === "sending"
+            ? "..."
+            : status === "sent"
+              ? "Sent"
+              : "Send"}
         </RowActionButton>
       }
     />
-  )
+  );
 }
 
-// --- Flavor 3: co-organizer list in event detail (role badge + follow) ------
+/* -------------------------------------------------------------------------- */
+/* Co-organizer list                                                          */
+/* -------------------------------------------------------------------------- */
 
 export interface CoOrganizerListRowProps {
-  user: ProfileRowUser
-  role: "organizer" | "co-organizer"
-  isFollowing: boolean
-  onToggleFollow: () => void
-  followPending?: boolean
-  onClick?: () => void
-  className?: string
+  user: ProfileRowUser;
+  role: "organizer" | "co-organizer";
+  isFollowing: boolean;
+  onToggleFollow: () => void;
+  followPending?: boolean;
+  onClick?: () => void;
+  className?: string;
 }
 
 export function CoOrganizerListRow({
@@ -253,17 +337,29 @@ export function CoOrganizerListRow({
         <span
           className={cn(
             "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-            role === "organizer" ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"
+            role === "organizer"
+              ? "bg-indigo-50 text-indigo-700"
+              : "bg-slate-100 text-slate-600"
           )}
         >
-          {role === "organizer" ? "Organizer" : "Co-organizer"}
+          {role === "organizer"
+            ? "Organizer"
+            : "Co-organizer"}
         </span>
       }
       trailing={
-        <RowActionButton active={isFollowing} disabled={followPending} onClick={onToggleFollow}>
-          {followPending ? "..." : isFollowing ? "Following" : "Follow"}
+        <RowActionButton
+          active={isFollowing}
+          disabled={followPending}
+          onClick={onToggleFollow}
+        >
+          {followPending
+            ? "..."
+            : isFollowing
+              ? "Following"
+              : "Follow"}
         </RowActionButton>
       }
     />
-  )
+  );
 }

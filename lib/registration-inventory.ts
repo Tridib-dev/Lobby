@@ -1,0 +1,234 @@
+import { ClientSession, Types } from "mongoose";
+import connectToDatabase from "@/lib/mongodb";
+import { Event } from "@/database/event.model";
+import { Booking } from "@/database/booking.model";
+import { Order } from "@/database/Order.model";
+import EventRegistration from "@/database/event-registration.model";
+export { calculateAvailability } from "@/lib/capacity";
+
+export const PAYMENT_HOLD_MS = 10 * 60 * 1000;
+
+export type InventoryFailure = "not_found" | "sold_out" | "already_registered" | "hold_expired";
+
+export class InventoryError extends Error {
+  constructor(public readonly reason: InventoryFailure) {
+    super(reason);
+  }
+}
+
+const availabilityFilter = (eventId: string) => ({
+  _id: eventId,
+  $or: [
+    { capacity: { $exists: false } },
+    { capacity: null },
+    {
+      $expr: {
+        $lt: [
+          { $add: [{ $ifNull: ["$confirmedRegistrationCount", 0] }, { $ifNull: ["$reservedRegistrationCount", 0] }] },
+          "$capacity",
+        ],
+      },
+    },
+  ],
+});
+
+async function releaseExpiredHolds(eventId: string, session: ClientSession, now = new Date()) {
+  const holds = await EventRegistration.find({ eventId, state: "payment_hold", expiresAt: { $lte: now } })
+    .session(session)
+    .select("_id")
+    .lean();
+  if (!holds.length) return 0;
+
+  await EventRegistration.updateMany(
+    { _id: { $in: holds.map((hold) => hold._id) }, state: "payment_hold" },
+    { $set: { state: "expired" }, $unset: { expiresAt: 1 } },
+    { session }
+  );
+  await Event.updateOne(
+    { _id: eventId },
+    { $inc: { reservedRegistrationCount: -holds.length } },
+    { session }
+  );
+  return holds.length;
+}
+
+/** Run from a protected scheduler so abandoned payment windows cannot lock seats. */
+export async function releaseExpiredPaymentHolds() {
+  const db = await connectToDatabase();
+  const eventIds = await EventRegistration.distinct("eventId", { state: "payment_hold", expiresAt: { $lte: new Date() } });
+  let released = 0;
+  for (const eventId of eventIds) {
+    const session = await db.startSession();
+    try {
+      await session.withTransaction(async () => {
+        released += await releaseExpiredHolds(eventId.toString(), session);
+      });
+    } finally {
+      await session.endSession();
+    }
+  }
+  return { released, eventsProcessed: eventIds.length };
+}
+
+async function hasLegacyRegistration(eventId: string, clerkId: string, session: ClientSession) {
+  const [booking, paidOrder] = await Promise.all([
+    Booking.exists({ eventId, clerkId }).session(session),
+    Order.exists({ eventId, clerkId, status: "paid" }).session(session),
+  ]);
+  return Boolean(booking || paidOrder);
+}
+
+export async function createFreeRegistration(input: {
+  eventId: string;
+  clerkId: string;
+  email: string;
+  slug: string;
+}) {
+  if (!Types.ObjectId.isValid(input.eventId)) throw new InventoryError("not_found");
+  const db = await connectToDatabase();
+  // Preserve the established path for unlimited/legacy events. Inventory
+  // transactions only apply after an organizer opts into a hard cap.
+  const event = await Event.findById(input.eventId).select("capacity").lean();
+  if (!event) throw new InventoryError("not_found");
+  if (typeof event.capacity !== "number") {
+    const booking = await Booking.create({ clerkId: input.clerkId, eventId: input.eventId, slug: input.slug, email: input.email });
+    return { bookingId: booking._id.toString() };
+  }
+  const session = await db.startSession();
+  try {
+    let bookingId = "";
+    await session.withTransaction(async () => {
+      await releaseExpiredHolds(input.eventId, session);
+      if (await hasLegacyRegistration(input.eventId, input.clerkId, session)) {
+        throw new InventoryError("already_registered");
+      }
+
+      const existing = await EventRegistration.findOne({ eventId: input.eventId, clerkId: input.clerkId }).session(session);
+      if (existing && ["free_confirmed", "paid_confirmed", "payment_hold"].includes(existing.state)) {
+        throw new InventoryError("already_registered");
+      }
+
+      const event = await Event.findOneAndUpdate(
+        availabilityFilter(input.eventId),
+        { $inc: { confirmedRegistrationCount: 1 } },
+        { new: true, session }
+      );
+      if (!event) {
+        const exists = await Event.exists({ _id: input.eventId }).session(session);
+        throw new InventoryError(exists ? "sold_out" : "not_found");
+      }
+
+      const booking = await Booking.create([{ clerkId: input.clerkId, eventId: input.eventId, slug: input.slug, email: input.email }], { session });
+      await EventRegistration.findOneAndUpdate(
+        { eventId: input.eventId, clerkId: input.clerkId },
+        { $set: { state: "free_confirmed", bookingId: booking[0]._id }, $unset: { expiresAt: 1 } },
+        { upsert: true, new: true, session }
+      );
+      bookingId = booking[0]._id.toString();
+    });
+    return { bookingId };
+  } finally {
+    await session.endSession();
+  }
+}
+
+export async function reservePaidRegistration(input: { eventId: string; clerkId: string }) {
+  if (!Types.ObjectId.isValid(input.eventId)) throw new InventoryError("not_found");
+  const db = await connectToDatabase();
+  const session = await db.startSession();
+  try {
+    let registrationId = "";
+    let expiresAt = new Date();
+    await session.withTransaction(async () => {
+      await releaseExpiredHolds(input.eventId, session);
+      if (await hasLegacyRegistration(input.eventId, input.clerkId, session)) throw new InventoryError("already_registered");
+      const existing = await EventRegistration.findOne({ eventId: input.eventId, clerkId: input.clerkId }).session(session);
+      if (existing?.state === "payment_hold" && existing.expiresAt && existing.expiresAt > new Date()) {
+        registrationId = existing._id.toString();
+        expiresAt = existing.expiresAt;
+        return;
+      }
+      if (existing && ["free_confirmed", "paid_confirmed"].includes(existing.state)) throw new InventoryError("already_registered");
+
+      const event = await Event.findOneAndUpdate(availabilityFilter(input.eventId), { $inc: { reservedRegistrationCount: 1 } }, { new: true, session });
+      if (!event) {
+        const exists = await Event.exists({ _id: input.eventId }).session(session);
+        throw new InventoryError(exists ? "sold_out" : "not_found");
+      }
+      expiresAt = new Date(Date.now() + PAYMENT_HOLD_MS);
+      const registration = await EventRegistration.findOneAndUpdate(
+        { eventId: input.eventId, clerkId: input.clerkId },
+        { $set: { state: "payment_hold", expiresAt }, $unset: { razorpayOrderId: 1 } },
+        { upsert: true, new: true, session }
+      );
+      registrationId = registration._id.toString();
+    });
+    return { registrationId, expiresAt };
+  } finally {
+    await session.endSession();
+  }
+}
+
+export async function attachPaymentOrder(input: { registrationId: string; eventId: string; clerkId: string; razorpayOrderId: string }) {
+  await EventRegistration.updateOne(
+    { _id: input.registrationId, eventId: input.eventId, clerkId: input.clerkId, state: "payment_hold", expiresAt: { $gt: new Date() } },
+    { $set: { razorpayOrderId: input.razorpayOrderId } }
+  );
+}
+
+export async function releasePaidRegistrationHold(input: { eventId: string; clerkId: string; registrationId?: string }) {
+  const db = await connectToDatabase();
+  const session = await db.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const registration = await EventRegistration.findOneAndUpdate(
+        { _id: input.registrationId, eventId: input.eventId, clerkId: input.clerkId, state: "payment_hold" },
+        { $set: { state: "released" }, $unset: { expiresAt: 1 } },
+        { new: true, session }
+      );
+      if (registration) await Event.updateOne({ _id: input.eventId }, { $inc: { reservedRegistrationCount: -1 } }, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
+export async function confirmPaidRegistration(input: {
+  eventId: string; clerkId: string; razorpayOrderId: string; eventTitle: string; eventSlug: string;
+  amountPaise: number; razorpayPaymentId: string; razorpaySignature: string;
+}) {
+  const db = await connectToDatabase();
+  const session = await db.startSession();
+  try {
+    let orderId = "";
+    await session.withTransaction(async () => {
+      const existingOrder = await Order.findOne({ razorpayOrderId: input.razorpayOrderId }).session(session);
+      if (existingOrder?.status === "paid") { orderId = existingOrder._id.toString(); return; }
+
+      const registration = await EventRegistration.findOne({ eventId: input.eventId, clerkId: input.clerkId, razorpayOrderId: input.razorpayOrderId })
+        .session(session);
+      if (!registration || registration.state !== "payment_hold") throw new InventoryError("hold_expired");
+      if (!registration.expiresAt || registration.expiresAt <= new Date()) {
+        await EventRegistration.updateOne({ _id: registration._id }, { $set: { state: "expired" }, $unset: { expiresAt: 1 } }, { session });
+        await Event.updateOne({ _id: input.eventId }, { $inc: { reservedRegistrationCount: -1 } }, { session });
+        throw new InventoryError("hold_expired");
+      }
+
+      const order = await Order.create([{
+        clerkId: input.clerkId, eventId: input.eventId, eventTitle: input.eventTitle, eventSlug: input.eventSlug,
+        amount: input.amountPaise, razorpayOrderId: input.razorpayOrderId, razorpayPaymentId: input.razorpayPaymentId,
+        razorpaySignature: input.razorpaySignature, status: "paid",
+      }], { session });
+      await Event.updateOne({ _id: input.eventId }, { $inc: { reservedRegistrationCount: -1, confirmedRegistrationCount: 1 } }, { session });
+      await EventRegistration.updateOne(
+        { _id: registration._id },
+        { $set: { state: "paid_confirmed", orderId: order[0]._id }, $unset: { expiresAt: 1 } },
+        { session }
+      );
+      orderId = order[0]._id.toString();
+    });
+    return { orderId };
+  } finally {
+    await session.endSession();
+  }
+}
