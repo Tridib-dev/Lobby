@@ -1,3 +1,5 @@
+// app\api\cron\release-capacity-holds\route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { releaseExpiredPaymentHolds } from "@/lib/registration-inventory";
 
