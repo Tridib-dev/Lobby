@@ -1,32 +1,39 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Plus, X } from "lucide-react"
-import { ProfileRowShell, type ProfileRowUser } from "./ProfileRow"
-import { AddCoOrganizerModal } from "./AddCoOrganizerModal"
+import { useState } from "react";
+import { Plus, X } from "lucide-react";
+import {
+  ProfileRowShell,
+  type ProfileRowUser,
+} from "./ProfileRow";
+import { AddCoOrganizerModal } from "./AddCoOrganizerModal";
 
 export interface CoOrganizerPickerProps {
-  /** The current user creating the event — connections are fetched relative to them. */
-  viewerClerkId: string
-  value: ProfileRowUser[]
-  onChange: (next: ProfileRowUser[]) => void
+  viewerClerkId: string;
+  value: ProfileRowUser[];
+  onChange: (next: ProfileRowUser[]) => void;
 }
 
-/**
- * Local selection only — this manages the co-organizer list as plain form
- * state (`value`/`onChange`), the same way you'd wire any other multi-value
- * field on a create-event form. Nothing here writes to the database; submit
- * the resulting clerkIds along with the rest of the event payload.
- */
-export function CoOrganizerPicker({ viewerClerkId, value, onChange }: CoOrganizerPickerProps) {
-  const [open, setOpen] = useState(false)
-  const selectedClerkIds = new Set(value.map((u) => u.clerkId))
+export function CoOrganizerPicker({
+  viewerClerkId,
+  value,
+  onChange,
+}: CoOrganizerPickerProps) {
+  const [open, setOpen] = useState(false);
+
+  const selectedClerkIds = new Set(
+    value.map((u) => u.clerkId)
+  );
 
   function handleToggle(user: ProfileRowUser) {
     if (selectedClerkIds.has(user.clerkId)) {
-      onChange(value.filter((u) => u.clerkId !== user.clerkId))
+      onChange(
+        value.filter(
+          (u) => u.clerkId !== user.clerkId
+        )
+      );
     } else {
-      onChange([...value, user])
+      onChange([...value, user]);
     }
   }
 
@@ -40,7 +47,7 @@ export function CoOrganizerPicker({ viewerClerkId, value, onChange }: CoOrganize
             <button
               type="button"
               onClick={() => handleToggle(user)}
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/20 text-muted-foreground transition-colors hover:bg-muted/50"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 shadow-sm transition-all hover:bg-white hover:text-slate-800 hover:shadow"
               aria-label={`Remove ${user.firstName} ${user.lastName}`}
             >
               <X size={14} />
@@ -52,7 +59,7 @@ export function CoOrganizerPicker({ viewerClerkId, value, onChange }: CoOrganize
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border/50 bg-muted/20 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-accent-foreground"
+        className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 shadow-sm transition-all hover:border-indigo-300 hover:bg-indigo-50/50 hover:text-indigo-700 hover:shadow-md"
       >
         <Plus size={16} />
         Invite co-organizer
@@ -66,5 +73,5 @@ export function CoOrganizerPicker({ viewerClerkId, value, onChange }: CoOrganize
         onToggle={handleToggle}
       />
     </div>
-  )
+  );
 }

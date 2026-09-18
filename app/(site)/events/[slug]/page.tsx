@@ -217,6 +217,9 @@ async function EventContent({ slug }: { slug: string }) {
               eventDate={date}
               eventTime={time}
               timezone={event.timezone}
+              capacity={event.capacity}
+              confirmedRegistrationCount={event.confirmedRegistrationCount}
+              reservedRegistrationCount={event.reservedRegistrationCount}
             />
         </>
     );

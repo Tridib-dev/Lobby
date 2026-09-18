@@ -49,6 +49,11 @@ export interface IEvent {
   categorySlug?: string;
   price: number;
   isFree?: boolean;
+  /** Undefined means registrations are unlimited. */
+  capacity?: number;
+  /** Internal inventory counters. They are only mutated by registration-inventory. */
+  confirmedRegistrationCount?: number;
+  reservedRegistrationCount?: number;
   sponsors: ISponsorItem[];
   timezone?: string;
   startAtUTC?: Date;
@@ -215,6 +220,16 @@ const eventSchema = new Schema<IEvent>(
       min: 0,
       default: 0
     },
+    capacity: {
+      type: Number,
+      min: 5,
+      validate: {
+        validator: (value: number | undefined) => value === undefined || Number.isSafeInteger(value),
+        message: "capacity must be a whole number of at least 5.",
+      },
+    },
+    confirmedRegistrationCount: { type: Number, default: 0, min: 0 },
+    reservedRegistrationCount: { type: Number, default: 0, min: 0 },
 
     // Sponsors — optional overall, but any entry that IS provided must have
     // a valid name + website. logo is never user-entered; it's filled in

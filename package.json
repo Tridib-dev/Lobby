@@ -9,7 +9,9 @@
     "lint": "eslint",
     "audit:order-amounts": "node --env-file=.env.local scripts/audit-order-amounts.mjs",
     "repair:order-amounts": "node --env-file=.env.local scripts/repair-order-amounts.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:capacity": "vitest run tests/registration-inventory.test.ts",
+    "audit:capacity": "node --env-file=.env.local scripts/audit-capacity-inventory.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.9",
@@ -18,6 +20,8 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@imagekit/next": "^2.1.5",
     "@number-flow/react": "^0.6.2",
+    "@radix-ui/react-alert-dialog": "^1.1.23",
+    "@radix-ui/react-slot": "^1.3.3",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.1.0",
     "@stream-io/node-sdk": "^0.7.63",
@@ -32,7 +36,7 @@
     "html-to-image": "^1.11.13",
     "html5-qrcode": "^2.3.8",
     "imagekit": "^6.0.0",
-    "lucide-react": "^1.22.0",
+    "lucide-react": "^1.47.0",
     "luxon": "^3.7.2",
     "mongoose": "^9.7.0",
     "next": "16.2.9",

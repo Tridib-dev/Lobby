@@ -67,6 +67,7 @@ export interface EventSettingsSummary {
     country: string;
     price: number;
     isFree: boolean;
+    capacity: number | null;
     mode: string;
     category: string;
     slug: string;
@@ -83,7 +84,7 @@ export const getEventSettings = cache(
 
         const event = await Event.findById(eventId)
             .select(
-                "title description overview date time timezone startAtUTC venue location address city state country price isFree mode category slug"
+                "title description overview date time timezone startAtUTC venue location address city state country price isFree capacity mode category slug"
             )
             .lean<{
                 title: string;
@@ -101,6 +102,7 @@ export const getEventSettings = cache(
                 country: string;
                 price: number;
                 isFree: boolean;
+                capacity?: number;
                 mode: string;
                 category: string;
                 slug: string;
@@ -124,6 +126,7 @@ export const getEventSettings = cache(
             country: event.country ?? "",
             price: event.price ?? 0,
             isFree: event.isFree ?? event.price === 0,
+            capacity: event.capacity ?? null,
             mode: event.mode,
             category: event.category,
             slug: event.slug,

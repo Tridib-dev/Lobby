@@ -41,6 +41,8 @@ export interface EventDraft {
   // Step 5 — Tickets
   isFree: boolean;
   price: number;
+  hasCapacityLimit: boolean;
+  capacity: number | null;
 
   // Step 6 — Organizer
   organizer: string;
@@ -80,6 +82,8 @@ export const emptyDraft: EventDraft = {
 
   isFree: true,
   price: 0,
+  hasCapacityLimit: false,
+  capacity: null,
 
   organizer: "",
   organizerEmails: [],
@@ -134,7 +138,7 @@ export const validateStep = (draft: EventDraft, step: WizardStepKey): boolean =>
       return draft.audience.length > 0 && draft.tags.length > 0 && validAgenda.length > 0;
     }
     case "tickets":
-      return draft.isFree || draft.price > 0;
+      return (draft.isFree || draft.price > 0) && (!draft.hasCapacityLimit || (Number.isSafeInteger(draft.capacity) && (draft.capacity ?? 0) >= 5));
     case "organizer":
       return draft.organizer.trim().length > 0 && draft.organizerEmails.length > 0;
     case "review":

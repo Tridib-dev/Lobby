@@ -2,7 +2,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { createOrder } from "@/lib/actions/order.actions";
 import { sendOrderReceipt } from "@/lib/email/services/booking.email";
 import { Event } from "@/database/event.model";
 import connectToDatabase from "@/lib/mongodb";
@@ -11,6 +10,8 @@ import Razorpay from "razorpay";
 import { isValidObjectId } from "mongoose";
 import { paiseToRupees, rupeesToPaise } from "@/lib/payments/money";
 import { isValidEventTimezone } from "@/lib/time";
+import { confirmPaidRegistration, InventoryError } from "@/lib/registration-inventory";
+import { createOrder } from "@/lib/actions/order.actions";
 
 type EventEmailDoc = {
     price?: number;
@@ -23,6 +24,7 @@ type EventEmailDoc = {
     mode?: string;
     timezone?: string;
     startAtUTC?: string | Date;
+    capacity?: number;
 };
 
 const razorpay = new Razorpay({
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const eventDoc = await Event.findById(eventId)
-            .select("price title slug date time location mode timezone startAtUTC")
+            .select("price title slug date time location mode timezone startAtUTC capacity")
             .lean<EventEmailDoc | null>();
         if (!eventDoc) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
@@ -102,18 +104,40 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Payment details could not be verified" }, { status: 400 });
         }
 
-        const result = await createOrder({
-            eventId,
-            eventTitle: eventDoc.title,
-            eventSlug: eventDoc.slug,
-            amountPaise,
-            razorpayOrderId: razorpay_order_id,
-            razorpayPaymentId: razorpay_payment_id,
-            razorpaySignature: razorpay_signature,
-        });
-
-        if (!result.success) {
-            return NextResponse.json({ error: result.error }, { status: 500 });
+        let result: { orderId: string };
+        try {
+            if (typeof eventDoc.capacity === "number") {
+                result = await confirmPaidRegistration({
+                    eventId,
+                    clerkId: userId,
+                    eventTitle: eventDoc.title,
+                    eventSlug: eventDoc.slug,
+                    amountPaise,
+                    razorpayOrderId: razorpay_order_id,
+                    razorpayPaymentId: razorpay_payment_id,
+                    razorpaySignature: razorpay_signature,
+                });
+            } else {
+                const legacy = await createOrder({
+                    eventId,
+                    eventTitle: eventDoc.title,
+                    eventSlug: eventDoc.slug,
+                    amountPaise,
+                    razorpayOrderId: razorpay_order_id,
+                    razorpayPaymentId: razorpay_payment_id,
+                    razorpaySignature: razorpay_signature,
+                });
+                if (!legacy.success) throw new Error(legacy.error);
+                result = { orderId: legacy.order._id.toString() };
+            }
+        } catch (error) {
+            if (error instanceof InventoryError) {
+                const message = error.reason === "hold_expired"
+                    ? "Your payment was received after its reservation expired. Please contact support for a refund."
+                    : "Your registration could not be confirmed.";
+                return NextResponse.json({ error: message, code: error.reason }, { status: 409 });
+            }
+            throw error;
         }
 
         const recipientTimezone = typeof verificationPayload.recipientTimezone === "string"
@@ -128,7 +152,7 @@ export async function POST(req: NextRequest) {
                 eventDate: eventDoc?.date ?? "",
                 eventTime: eventDoc?.time ?? "",
                 eventLocation: eventDoc?.location ?? "",
-                ticketId: result.order._id.toString(),
+                ticketId: result.orderId,
                 paymentId: razorpay_payment_id,
                 amount: paiseToRupees(amountPaise),
                 eventSlug: eventDoc.slug,
@@ -139,7 +163,7 @@ export async function POST(req: NextRequest) {
             });
         }
         
-        return NextResponse.json({ success: true, order: result.order });
+        return NextResponse.json({ success: true, orderId: result.orderId });
     } catch (error) {
         console.error("[Razorpay verify]", error);
         return NextResponse.json({ error: "Verification failed" }, { status: 500 });

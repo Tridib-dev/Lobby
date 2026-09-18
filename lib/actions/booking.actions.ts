@@ -8,6 +8,7 @@ import { Order } from "@/database/Order.model";
 import { Event } from "@/database/event.model";
 import { sendBookingConfirmation } from "@/lib/email/services/booking.email";
 import { isValidEventTimezone } from "@/lib/time";
+import { createFreeRegistration, InventoryError } from "@/lib/registration-inventory";
 
 type EventEmailDoc = {
     title?: string;
@@ -49,7 +50,7 @@ export const CreateBooking = async ({
 
         await connectToDatabase();
 
-        const booking = await Booking.create({
+        const { bookingId } = await createFreeRegistration({
             clerkId: userId,
             eventId,
             slug,
@@ -67,7 +68,7 @@ export const CreateBooking = async ({
             eventDate: eventDoc?.date ?? "",
             eventTime: eventDoc?.time ?? "",
             eventLocation: eventDoc?.location ?? "",
-            ticketId: booking._id.toString(),
+            ticketId: bookingId,
             price: 0,
             eventSlug: eventDoc?.slug ?? slug,
             mode: eventDoc?.mode,
@@ -78,6 +79,15 @@ export const CreateBooking = async ({
         
         return { success: true };
     } catch (error: unknown) {
+        if (error instanceof InventoryError) {
+            const errors = {
+                sold_out: "This event is sold out.",
+                already_registered: "You've already booked this event.",
+                not_found: "This event is no longer available.",
+                hold_expired: "Your reservation expired. Please try again.",
+            };
+            return { success: false, error: errors[error.reason] };
+        }
         const bookingError = error as { code?: number };
         if (bookingError.code === 11000) {
             return {

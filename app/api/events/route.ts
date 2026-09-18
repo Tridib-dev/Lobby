@@ -30,6 +30,7 @@ type ImageKitUploadResult = {
 
 const MAX_IMAGE_FILE_SIZE = 3 * 1024 * 1024;
 const MAX_SLIDESHOW_IMAGES = 3;
+const MINIMUM_CAPACITY = 5;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
 
 const isDuplicateKeyError = (error: unknown): boolean =>
@@ -166,6 +167,11 @@ export async function POST(req: NextRequest) {
         }
 
         const slug = slugifySegment(title);
+        const rawCapacity = String(eventFields.capacity ?? "").trim();
+        const capacity = rawCapacity ? Number(rawCapacity) : undefined;
+        if (capacity !== undefined && (!Number.isSafeInteger(capacity) || capacity < MINIMUM_CAPACITY)) {
+            return NextResponse.json({ message: `Capacity must be a whole number of at least ${MINIMUM_CAPACITY}.` }, { status: 400 });
+        }
 
         const organizerEmails = formData.getAll("organizerEmails") as string[];
         const emailCheck = await validateEmails(organizerEmails);
@@ -291,6 +297,7 @@ export async function POST(req: NextRequest) {
                 mode: String(eventFields.mode ?? ""),
                 audience,
                 price: Number(eventFields.price ?? 0),
+                capacity,
                 sponsors: JSON.parse(formData.get('sponsors') as string || '[]'),
                 organizer: String(eventFields.organizer ?? ""),
                 timezone: eventTimezoneField,
