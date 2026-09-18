@@ -5,6 +5,8 @@ import { Booking } from "@/database/booking.model";
 import { Order } from "@/database/Order.model";
 import EventRegistration from "@/database/event-registration.model";
 export { calculateAvailability } from "@/lib/capacity";
+import crypto from "crypto";
+
 
 export const PAYMENT_HOLD_MS = 10 * 60 * 1000;
 
@@ -134,48 +136,159 @@ export async function createFreeRegistration(input: {
 
 export async function reservePaidRegistration(input: { eventId: string; clerkId: string }) {
   if (!Types.ObjectId.isValid(input.eventId)) throw new InventoryError("not_found");
+
   const db = await connectToDatabase();
   const session = await db.startSession();
+
   try {
     let registrationId = "";
     let expiresAt = new Date();
+    let razorpayOrderId: string | undefined;
+    let razorpayReceipt: string | undefined;
+
     await session.withTransaction(async () => {
       await releaseExpiredHolds(input.eventId, session);
-      if (await hasLegacyRegistration(input.eventId, input.clerkId, session)) throw new InventoryError("already_registered");
-      const existing = await EventRegistration.findOne({ eventId: input.eventId, clerkId: input.clerkId }).session(session);
-      if (existing?.state === "payment_hold" && existing.expiresAt && existing.expiresAt > new Date()) {
+
+      if (await hasLegacyRegistration(input.eventId, input.clerkId, session)) {
+        throw new InventoryError("already_registered");
+      }
+
+      const existing = await EventRegistration.findOne({
+        eventId: input.eventId,
+        clerkId: input.clerkId,
+      }).session(session);
+
+      // Reuse the existing active hold and its payment attempt.
+      if (
+        existing?.state === "payment_hold" &&
+        existing.expiresAt &&
+        existing.expiresAt > new Date()
+      ) {
         registrationId = existing._id.toString();
         expiresAt = existing.expiresAt;
+        razorpayOrderId = existing.razorpayOrderId;
+        razorpayReceipt =
+          existing.razorpayReceipt ?? `reg_${crypto.randomUUID()}`;
+
+        // Legacy active hold that predates razorpayReceipt.
+        if (!existing.razorpayReceipt) {
+          await EventRegistration.updateOne(
+            { _id: existing._id },
+            { $set: { razorpayReceipt } },
+            { session }
+          );
+        }
+
         return;
       }
-      if (existing && ["free_confirmed", "paid_confirmed"].includes(existing.state)) throw new InventoryError("already_registered");
 
-      const event = await Event.findOneAndUpdate(availabilityFilter(input.eventId), { $inc: { reservedRegistrationCount: 1 } }, { new: true, session });
+      if (
+        existing &&
+        ["free_confirmed", "paid_confirmed"].includes(existing.state)
+      ) {
+        throw new InventoryError("already_registered");
+      }
+
+      const event = await Event.findOneAndUpdate(
+        availabilityFilter(input.eventId),
+        { $inc: { reservedRegistrationCount: 1 } },
+        { new: true, session }
+      );
+
       if (!event) {
         const exists = await Event.exists({ _id: input.eventId }).session(session);
         throw new InventoryError(exists ? "sold_out" : "not_found");
       }
+
       expiresAt = new Date(Date.now() + PAYMENT_HOLD_MS);
+      razorpayReceipt = `reg_${crypto.randomUUID()}`;
+
       const registration = await EventRegistration.findOneAndUpdate(
-        { eventId: input.eventId, clerkId: input.clerkId },
-        { $set: { state: "payment_hold", expiresAt }, $unset: { razorpayOrderId: 1 } },
-        { upsert: true, new: true, session }
+        {
+          eventId: input.eventId,
+          clerkId: input.clerkId,
+        },
+        {
+          $set: {
+            state: "payment_hold",
+            expiresAt,
+            razorpayReceipt,
+          },
+          $unset: {
+            razorpayOrderId: 1,
+          },
+        },
+        {
+          upsert: true,
+          new: true,
+          session,
+        }
       );
+
       registrationId = registration._id.toString();
     });
-    return { registrationId, expiresAt };
+
+    return {
+      registrationId,
+      expiresAt,
+      razorpayOrderId,
+      razorpayReceipt,
+    };
   } finally {
     await session.endSession();
   }
 }
 
-export async function attachPaymentOrder(input: { registrationId: string; eventId: string; clerkId: string; razorpayOrderId: string }) {
-  await EventRegistration.updateOne(
-    { _id: input.registrationId, eventId: input.eventId, clerkId: input.clerkId, state: "payment_hold", expiresAt: { $gt: new Date() } },
-    { $set: { razorpayOrderId: input.razorpayOrderId } }
-  );
-}
 
+export async function attachPaymentOrder(input: {
+  registrationId: string;
+  eventId: string;
+  clerkId: string;
+  razorpayOrderId: string;
+}) {
+  const result = await EventRegistration.updateOne(
+    {
+      _id: input.registrationId,
+      eventId: input.eventId,
+      clerkId: input.clerkId,
+      state: "payment_hold",
+      expiresAt: { $gt: new Date() },
+      razorpayOrderId: { $exists: false },
+    },
+    {
+      $set: {
+        razorpayOrderId: input.razorpayOrderId,
+      },
+    }
+  );
+
+  if (result.matchedCount === 1) {
+    return {
+      attached: true,
+      orderId: input.razorpayOrderId,
+    };
+  }
+
+  // Another request may have attached an order first.
+  const existing = await EventRegistration.findOne({
+    _id: input.registrationId,
+    eventId: input.eventId,
+    clerkId: input.clerkId,
+    state: "payment_hold",
+    expiresAt: { $gt: new Date() },
+  })
+    .select("razorpayOrderId")
+    .lean();
+
+  if (existing?.razorpayOrderId) {
+    return {
+      attached: false,
+      orderId: existing.razorpayOrderId,
+    };
+  }
+
+  throw new InventoryError("hold_expired");
+}
 export async function releasePaidRegistrationHold(input: { eventId: string; clerkId: string; registrationId?: string }) {
   const db = await connectToDatabase();
   const session = await db.startSession();
@@ -183,7 +296,13 @@ export async function releasePaidRegistrationHold(input: { eventId: string; cler
     await session.withTransaction(async () => {
       const registration = await EventRegistration.findOneAndUpdate(
         { _id: input.registrationId, eventId: input.eventId, clerkId: input.clerkId, state: "payment_hold" },
-        { $set: { state: "released" }, $unset: { expiresAt: 1 } },
+        {
+          $set: { state: "released" },
+          $unset: {
+            expiresAt: 1,
+            razorpayReceipt: 1,
+          },
+        },
         { new: true, session }
       );
       if (registration) await Event.updateOne({ _id: input.eventId }, { $inc: { reservedRegistrationCount: -1 } }, { session });

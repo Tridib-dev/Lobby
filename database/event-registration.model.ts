@@ -8,6 +8,7 @@ export interface IEventRegistration {
   state: RegistrationState;
   expiresAt?: Date;
   razorpayOrderId?: string;
+  razorpayReceipt?: string;
   bookingId?: Types.ObjectId;
   orderId?: Types.ObjectId;
   createdAt: Date;
@@ -28,6 +29,7 @@ const eventRegistrationSchema = new Schema<IEventRegistration>(
     },
     expiresAt: { type: Date, index: true },
     razorpayOrderId: { type: String, sparse: true, unique: true },
+    razorpayReceipt: { type: String, sparse: true, unique: true },
     bookingId: { type: Schema.Types.ObjectId, ref: "Booking" },
     orderId: { type: Schema.Types.ObjectId, ref: "Order" },
   },
