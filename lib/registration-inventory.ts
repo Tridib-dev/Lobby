@@ -57,19 +57,31 @@ async function releaseExpiredHolds(eventId: string, session: ClientSession, now 
 /** Run from a protected scheduler so abandoned payment windows cannot lock seats. */
 export async function releaseExpiredPaymentHolds() {
   const db = await connectToDatabase();
-  const eventIds = await EventRegistration.distinct("eventId", { state: "payment_hold", expiresAt: { $lte: new Date() } });
+  const eventIds = await EventRegistration.distinct("eventId", {
+    state: "payment_hold",
+    expiresAt: { $lte: new Date() },
+  });
+
   let released = 0;
+
   for (const eventId of eventIds) {
     const session = await db.startSession();
+
     try {
-      await session.withTransaction(async () => {
-        released += await releaseExpiredHolds(eventId.toString(), session);
-      });
+      const eventReleased = await session.withTransaction(() =>
+        releaseExpiredHolds(eventId.toString(), session)
+      );
+
+      released += eventReleased ?? 0;
     } finally {
       await session.endSession();
     }
   }
-  return { released, eventsProcessed: eventIds.length };
+
+  return {
+    released,
+    eventsProcessed: eventIds.length,
+  };
 }
 
 async function hasLegacyRegistration(eventId: string, clerkId: string, session: ClientSession) {
@@ -89,7 +101,7 @@ export async function createFreeRegistration(input: {
   if (!Types.ObjectId.isValid(input.eventId)) throw new InventoryError("not_found");
   const db = await connectToDatabase();
   // Preserve the established path for unlimited/legacy events. Inventory
-  // transactions only apply after an organizer opts into a hard cap.
+  // transactions only apply after an organizer opts into a confihard cap.
   const event = await Event.findById(input.eventId).select("capacity").lean();
   if (!event) throw new InventoryError("not_found");
   if (typeof event.capacity !== "number") {
@@ -313,40 +325,119 @@ export async function releasePaidRegistrationHold(input: { eventId: string; cler
 }
 
 export async function confirmPaidRegistration(input: {
-  eventId: string; clerkId: string; razorpayOrderId: string; eventTitle: string; eventSlug: string;
-  amountPaise: number; razorpayPaymentId: string; razorpaySignature: string;
+  eventId: string;
+  clerkId: string;
+  razorpayOrderId: string;
+  eventTitle: string;
+  eventSlug: string;
+  amountPaise: number;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
 }) {
   const db = await connectToDatabase();
   const session = await db.startSession();
-  try {
-    let orderId = "";
-    await session.withTransaction(async () => {
-      const existingOrder = await Order.findOne({ razorpayOrderId: input.razorpayOrderId }).session(session);
-      if (existingOrder?.status === "paid") { orderId = existingOrder._id.toString(); return; }
 
-      const registration = await EventRegistration.findOne({ eventId: input.eventId, clerkId: input.clerkId, razorpayOrderId: input.razorpayOrderId })
-        .session(session);
-      if (!registration || registration.state !== "payment_hold") throw new InventoryError("hold_expired");
-      if (!registration.expiresAt || registration.expiresAt <= new Date()) {
-        await EventRegistration.updateOne({ _id: registration._id }, { $set: { state: "expired" }, $unset: { expiresAt: 1 } }, { session });
-        await Event.updateOne({ _id: input.eventId }, { $inc: { reservedRegistrationCount: -1 } }, { session });
+  try {
+    const result = await session.withTransaction(async () => {
+      const existingOrder = await Order.findOne({
+        razorpayOrderId: input.razorpayOrderId,
+      }).session(session);
+
+      if (existingOrder?.status === "paid") {
+        return {
+          status: "paid" as const,
+          orderId: existingOrder._id.toString(),
+        };
+      }
+
+      const registration = await EventRegistration.findOne({
+        eventId: input.eventId,
+        clerkId: input.clerkId,
+        razorpayOrderId: input.razorpayOrderId,
+      }).session(session);
+
+      if (!registration || registration.state !== "payment_hold") {
         throw new InventoryError("hold_expired");
       }
 
-      const order = await Order.create([{
-        clerkId: input.clerkId, eventId: input.eventId, eventTitle: input.eventTitle, eventSlug: input.eventSlug,
-        amount: input.amountPaise, razorpayOrderId: input.razorpayOrderId, razorpayPaymentId: input.razorpayPaymentId,
-        razorpaySignature: input.razorpaySignature, status: "paid",
-      }], { session });
-      await Event.updateOne({ _id: input.eventId }, { $inc: { reservedRegistrationCount: -1, confirmedRegistrationCount: 1 } }, { session });
-      await EventRegistration.updateOne(
-        { _id: registration._id },
-        { $set: { state: "paid_confirmed", orderId: order[0]._id }, $unset: { expiresAt: 1 } },
+      const now = new Date();
+
+      if (!registration.expiresAt || registration.expiresAt <= now) {
+        await EventRegistration.updateOne(
+          { _id: registration._id },
+          {
+            $set: { state: "expired" },
+            $unset: { expiresAt: 1 },
+          },
+          { session }
+        );
+
+        await Event.updateOne(
+          { _id: input.eventId },
+          { $inc: { reservedRegistrationCount: -1 } },
+          { session }
+        );
+
+        // Do not throw here.
+        // The transaction must be allowed to commit the cleanup.
+        return {
+          status: "hold_expired" as const,
+        };
+      }
+
+      const order = await Order.create(
+        [
+          {
+            clerkId: input.clerkId,
+            eventId: input.eventId,
+            eventTitle: input.eventTitle,
+            eventSlug: input.eventSlug,
+            amount: input.amountPaise,
+            razorpayOrderId: input.razorpayOrderId,
+            razorpayPaymentId: input.razorpayPaymentId,
+            razorpaySignature: input.razorpaySignature,
+            status: "paid",
+          },
+        ],
         { session }
       );
-      orderId = order[0]._id.toString();
+
+      await Event.updateOne(
+        { _id: input.eventId },
+        {
+          $inc: {
+            reservedRegistrationCount: -1,
+            confirmedRegistrationCount: 1,
+          },
+        },
+        { session }
+      );
+
+      await EventRegistration.updateOne(
+        { _id: registration._id },
+        {
+          $set: {
+            state: "paid_confirmed",
+            orderId: order[0]._id,
+          },
+          $unset: { expiresAt: 1 },
+        },
+        { session }
+      );
+
+      return {
+        status: "paid" as const,
+        orderId: order[0]._id.toString(),
+      };
     });
-    return { orderId };
+
+    if (result.status === "hold_expired") {
+      throw new InventoryError("hold_expired");
+    }
+
+    return {
+      orderId: result.orderId,
+    };
   } finally {
     await session.endSession();
   }
