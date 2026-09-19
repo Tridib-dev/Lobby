@@ -267,12 +267,18 @@ const StickyBookingBar = ({
                     }),
                 });
 
+                const verifyPayload = await verifyRes.json().catch(() => ({}));
+
                 if (verifyRes.ok) {
                     setHasBooked(true);
                     setTicketModalOpen(true);
                     toast.success("Your ticket is ready.");
                 } else {
-                    toast.error("Payment verification failed. Contact support.");
+                    toast.error(
+                        verifyPayload.message ??
+                        verifyPayload.error ??
+                        "Payment verification failed. Contact support."
+                    );
                 }
                 setIsBooking(false);
             },

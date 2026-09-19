@@ -88,10 +88,6 @@ export const getUserOrders = async () => {
         const orders = await Order.find({
             clerkId: userId,
             status: "paid",
-            $or: [
-                { fulfillmentStatus: "fulfilled" },
-                { fulfillmentStatus: { $exists: false } },
-            ],
         }).populate("eventId").sort({ createdAt: -1 });
 
         return JSON.parse(JSON.stringify(orders));

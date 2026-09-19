@@ -1,13 +1,17 @@
 // app/(dashboard)/dashboard/attended/page.tsx
 import { Suspense } from "react";
 import { PageHeader } from "@/components/dashboard/shell";
-import { getUserTickets } from "@/lib/actions/dashboard.actions";
+import { getUserPaymentIssues, getUserTickets } from "@/lib/actions/dashboard.actions";
 import TicketList from "@/components/dashboard/ticket-list";
+import PaymentIssues from "@/components/dashboard/payment-issues";
 
 export const metadata = { title: "My Tickets — DevEvent" };
 
 export default async function AttendedPage() {
-    const tickets = await getUserTickets();
+    const [tickets, paymentIssues] = await Promise.all([
+        getUserTickets(),
+        getUserPaymentIssues(),
+    ]);
 
     const upcoming = tickets.filter((t) => t.status === "upcoming");
     const past     = tickets.filter((t) => t.status === "past");
@@ -25,6 +29,8 @@ export default async function AttendedPage() {
                     </div>
                 }
             />
+
+            <PaymentIssues issues={paymentIssues} />
 
             <Suspense fallback={<TicketSkeleton />}>
                 <TicketList upcoming={upcoming} past={past} expired={expired} />

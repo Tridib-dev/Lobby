@@ -76,8 +76,7 @@ export async function POST(req: NextRequest) {
 
                 if (
                     order.amount !== amountPaise ||
-                    order.currency !== "INR" ||
-                    order.receipt !== hold.razorpayReceipt
+                    order.currency !== "INR"
                 ) {
                     throw new Error("Attached Razorpay order does not match the registration");
                 }
@@ -171,7 +170,8 @@ export async function POST(req: NextRequest) {
                 }
             }
         } catch (error) {
-            if (hold) {
+            // Keep the hold if an order may still be payable in an open checkout.
+            if (hold && !hold.razorpayOrderId && !order) {
                 await releasePaidRegistrationHold({
                     eventId,
                     clerkId: userId,
