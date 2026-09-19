@@ -87,7 +87,15 @@ export async function releaseExpiredPaymentHolds() {
 async function hasLegacyRegistration(eventId: string, clerkId: string, session: ClientSession) {
   const [booking, paidOrder] = await Promise.all([
     Booking.exists({ eventId, clerkId }).session(session),
-    Order.exists({ eventId, clerkId, status: "paid" }).session(session),
+    Order.exists({
+      eventId,
+      clerkId,
+      status: "paid",
+      $or: [
+          { fulfillmentStatus: "fulfilled" },
+          { fulfillmentStatus: { $exists: false } },
+      ],
+    }).session(session)
   ]);
   return Boolean(booking || paidOrder);
 }
@@ -343,7 +351,23 @@ export async function confirmPaidRegistration(input: {
         razorpayOrderId: input.razorpayOrderId,
       }).session(session);
 
+      // Idempotency: this payment has already been recorded.
       if (existingOrder?.status === "paid") {
+        if (existingOrder.fulfillmentStatus === "refund_required") {
+          return {
+            status: "refund_required" as const,
+            orderId: existingOrder._id.toString(),
+          };
+        }
+
+        if (existingOrder.fulfillmentStatus === "refunded") {
+          return {
+            status: "refunded" as const,
+            orderId: existingOrder._id.toString(),
+          };
+        }
+
+        // Includes old orders where fulfillmentStatus does not exist.
         return {
           status: "paid" as const,
           orderId: existingOrder._id.toString(),
@@ -356,35 +380,80 @@ export async function confirmPaidRegistration(input: {
         razorpayOrderId: input.razorpayOrderId,
       }).session(session);
 
-      if (!registration || registration.state !== "payment_hold") {
-        throw new InventoryError("hold_expired");
-      }
-
       const now = new Date();
 
-      if (!registration.expiresAt || registration.expiresAt <= now) {
-        await EventRegistration.updateOne(
-          { _id: registration._id },
-          {
-            $set: { state: "expired" },
-            $unset: { expiresAt: 1 },
-          },
+      /*
+       * The Razorpay payment is already authenticated and captured.
+       *
+       * If there is no valid payment hold anymore, the payment cannot
+       * be fulfilled. Record it durably as refund_required.
+       */
+      if (
+        !registration ||
+        registration.state !== "payment_hold" ||
+        !registration.expiresAt ||
+        registration.expiresAt <= now
+      ) {
+        // Release this reservation only if it is still an active
+        // payment hold and this transaction successfully changes it.
+        if (
+          registration &&
+          registration.state === "payment_hold" &&
+          registration.expiresAt &&
+          registration.expiresAt <= now
+        ) {
+          const expired = await EventRegistration.updateOne(
+            {
+              _id: registration._id,
+              state: "payment_hold",
+              expiresAt: { $lte: now },
+            },
+            {
+              $set: {
+                state: "expired",
+              },
+              $unset: {
+                expiresAt: 1,
+              },
+            },
+            { session }
+          );
+
+          if (expired.modifiedCount === 1) {
+            await Event.updateOne(
+              { _id: input.eventId },
+              { $inc: { reservedRegistrationCount: -1 } },
+              { session }
+            );
+          }
+        }
+
+        const order = await Order.create(
+          [
+            {
+              clerkId: input.clerkId,
+              eventId: input.eventId,
+              eventTitle: input.eventTitle,
+              eventSlug: input.eventSlug,
+              amount: input.amountPaise,
+              razorpayOrderId: input.razorpayOrderId,
+              razorpayPaymentId: input.razorpayPaymentId,
+              razorpaySignature: input.razorpaySignature,
+              status: "paid",
+              fulfillmentStatus: "refund_required",
+              refundRequiredAt: now,
+            },
+          ],
           { session }
         );
 
-        await Event.updateOne(
-          { _id: input.eventId },
-          { $inc: { reservedRegistrationCount: -1 } },
-          { session }
-        );
-
-        // Do not throw here.
-        // The transaction must be allowed to commit the cleanup.
         return {
-          status: "hold_expired" as const,
+          status: "refund_required" as const,
+          orderId: order[0]._id.toString(),
         };
       }
 
+      // Normal successful payment.
       const order = await Order.create(
         [
           {
@@ -397,6 +466,7 @@ export async function confirmPaidRegistration(input: {
             razorpayPaymentId: input.razorpayPaymentId,
             razorpaySignature: input.razorpaySignature,
             status: "paid",
+            fulfillmentStatus: "fulfilled",
           },
         ],
         { session }
@@ -414,13 +484,18 @@ export async function confirmPaidRegistration(input: {
       );
 
       await EventRegistration.updateOne(
-        { _id: registration._id },
+        {
+          _id: registration._id,
+          state: "payment_hold",
+        },
         {
           $set: {
             state: "paid_confirmed",
             orderId: order[0]._id,
           },
-          $unset: { expiresAt: 1 },
+          $unset: {
+            expiresAt: 1,
+          },
         },
         { session }
       );
@@ -431,13 +506,7 @@ export async function confirmPaidRegistration(input: {
       };
     });
 
-    if (result.status === "hold_expired") {
-      throw new InventoryError("hold_expired");
-    }
-
-    return {
-      orderId: result.orderId,
-    };
+    return result;
   } finally {
     await session.endSession();
   }

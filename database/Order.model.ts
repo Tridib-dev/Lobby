@@ -11,6 +11,10 @@ export interface IOrder {
     razorpayPaymentId?: string;      // filled after successful payment
     razorpaySignature?: string;      // filled after verification
     status: "pending" | "paid" | "failed";
+    fulfillmentStatus: "fulfilled" | "refund_required" | "refunded";
+    refundRequiredAt?: Date;
+    razorpayRefundId?: string;
+    refundedAt?: Date;
     checkedIn: boolean;     // interface
     checkedInAt?: Date;
     createdAt: Date;
@@ -38,6 +42,14 @@ const orderSchema = new Schema<IOrder>(
         razorpayOrderId: { type: String, required: true, unique: true },
         razorpayPaymentId: { type: String },
         razorpaySignature: { type: String },
+        fulfillmentStatus: {
+            type: String,
+            enum: ["fulfilled", "refund_required", "refunded"],
+            default: "fulfilled",
+        },
+        refundRequiredAt: { type: Date },
+        razorpayRefundId: { type: String },
+        refundedAt: { type: Date },
         checkedIn: { type: Boolean, default: false },   // schema
         checkedInAt: { type: Date },
         status: {

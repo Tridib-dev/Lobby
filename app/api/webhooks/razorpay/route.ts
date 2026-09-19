@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { Event } from "@/database/event.model";
 import connectToDatabase from "@/lib/mongodb";
-import { confirmPaidRegistration, InventoryError } from "@/lib/registration-inventory";
+import { confirmPaidRegistration } from "@/lib/registration-inventory";
 import { rupeesToPaise } from "@/lib/payments/money";
 
 const razorpay = new Razorpay({
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Amount mismatch" }, { status: 400 });
     }
 
-    await confirmPaidRegistration({
+    const result = await confirmPaidRegistration({
       eventId,
       clerkId,
       eventTitle: event.title,
@@ -64,15 +64,46 @@ export async function POST(request: NextRequest) {
       // used to validate the webhook, but is retained for the order record.
       razorpaySignature: signature,
     });
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    if (error instanceof InventoryError && error.reason === "hold_expired") {
-      // Payment is authentic but no longer has a seat. Return 200 to avoid
-      // retries creating noise; the operator can refund from Razorpay.
-      console.error("[razorpay webhook] payment arrived after capacity hold expiry", error);
-      return NextResponse.json({ ok: true, requiresRefund: true });
+
+    if (result.status === "refund_required") {
+      console.error(
+        "[razorpay webhook] captured payment requires refund",
+        {
+          razorpayOrderId: payment.order_id,
+          razorpayPaymentId: payment.id,
+          orderId: result.orderId,
+          eventId,
+          clerkId,
+        }
+      );
+
+      // The payment has been durably recorded as refund_required.
+      // Returning 200 prevents Razorpay from repeatedly retrying the same
+      // webhook while your team handles the refund manually.
+      return NextResponse.json({
+        ok: true,
+        requiresRefund: true,
+        orderId: result.orderId,
+      });
     }
+
+    if (result.status === "refunded") {
+      return NextResponse.json({
+        ok: true,
+        alreadyRefunded: true,
+        orderId: result.orderId,
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      orderId: result.orderId,
+    });
+  } catch (error) {
     console.error("[razorpay webhook]", error);
-    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Webhook processing failed" },
+      { status: 500 }
+    );
   }
 }
