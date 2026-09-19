@@ -65,6 +65,10 @@ export const hasUserPaidForEvent = async (eventId: string): Promise<boolean> => 
             clerkId: userId,
             eventId,
             status: "paid",
+            $or: [
+                { fulfillmentStatus: "fulfilled" },
+                { fulfillmentStatus: { $exists: false } },
+            ],
         });
 
         return !!order;
@@ -81,9 +85,10 @@ export const getUserOrders = async () => {
 
         await connectToDatabase();
 
-        const orders = await Order.find({ clerkId: userId, status: "paid" })
-            .populate("eventId")
-            .sort({ createdAt: -1 });
+        const orders = await Order.find({
+            clerkId: userId,
+            status: "paid",
+        }).populate("eventId").sort({ createdAt: -1 });
 
         return JSON.parse(JSON.stringify(orders));
     } catch {

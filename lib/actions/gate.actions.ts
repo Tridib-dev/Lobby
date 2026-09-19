@@ -260,7 +260,15 @@ async function markBookingCheckedIn(ticketId: string) {
 
 async function markOrderCheckedIn(ticketId: string) {
     return await Order.findOneAndUpdate(
-        { _id: ticketId, status: "paid", checkedIn: { $ne: true } },
+        {
+            _id: ticketId,
+            status: "paid",
+            checkedIn: { $ne: true },
+            $or: [
+                { fulfillmentStatus: "fulfilled" },
+                { fulfillmentStatus: { $exists: false } },
+            ],
+        },
         { $set: { checkedIn: true, checkedInAt: new Date() } },
         { returnDocument: "after" }
     ).lean();
@@ -457,7 +465,14 @@ export async function getEventAttendees(eventId: string): Promise<GateAttendeesR
 
         const [bookings, orders] = await Promise.all([
             Booking.find({ eventId }).sort({ createdAt: 1 }).lean(),
-            Order.find({ eventId, status: "paid" }).sort({ createdAt: 1 }).lean(),
+            Order.find({
+                eventId,
+                status: "paid",
+                $or: [
+                    { fulfillmentStatus: "fulfilled" },
+                    { fulfillmentStatus: { $exists: false } },
+                ],
+            }).sort({ createdAt: 1 }).lean(),
         ]);
 
         const bookingRows = await Promise.all(
@@ -743,7 +758,15 @@ export async function autoCheckInOnRoomJoin(eventId: string): Promise<AutoCheckI
 
         const [booking, order] = await Promise.all([
             Booking.findOne({ clerkId: userId, eventId }).lean(),
-            Order.findOne({ clerkId: userId, eventId, status: "paid" }).lean(),
+            Order.findOne({
+                clerkId: userId,
+                eventId,
+                status: "paid",
+                $or: [
+                    { fulfillmentStatus: "fulfilled" },
+                    { fulfillmentStatus: { $exists: false } },
+                ],
+            }).lean(),
         ]);
 
         if (booking) {
@@ -786,7 +809,15 @@ export async function autoCheckInOnRoomJoin(eventId: string): Promise<AutoCheckI
         if (order) {
             if (!order.checkedIn) {
                 const updated = await Order.findOneAndUpdate(
-                    { _id: order._id, status: "paid", checkedIn: { $ne: true } },
+                    {
+                        _id: order._id,
+                        status: "paid",
+                        checkedIn: { $ne: true },
+                        $or: [
+                            { fulfillmentStatus: "fulfilled" },
+                            { fulfillmentStatus: { $exists: false } },
+                        ],
+                    },
                     { $set: { checkedIn: true, checkedInAt: new Date() } },
                     { returnDocument: "after" }
                 ).lean();

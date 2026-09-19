@@ -38,6 +38,15 @@ export interface TicketItem {
     timezone?: string;
 }
 
+export interface PaymentIssueItem {
+    id: string;
+    eventTitle: string;
+    amount: number;
+    status: "refund_required" | "refunded";
+    createdAt: string;
+    refundedAt?: string;
+}
+
 export interface UserStats {
     attended: number;
     organized: number;
@@ -121,7 +130,14 @@ export const getUserTickets = cache(async (): Promise<TicketItem[]> => {
         // Fetch both in parallel
         const [bookings, orders, user] = await Promise.all([
             Booking.find({ clerkId: userId }).populate("eventId").lean(),
-            Order.find({ clerkId: userId, status: "paid" }).populate("eventId").lean(),
+            Order.find({
+                clerkId: userId,
+                status: "paid",
+                $or: [
+                    { fulfillmentStatus: "fulfilled" },
+                    { fulfillmentStatus: { $exists: false } },
+                ],
+            }).populate("eventId").lean(),
             User.findOne({ clerkId: userId }).select("username").lean(),
         ]);
         const username = (user as any)?.username ?? "";
@@ -209,6 +225,36 @@ export const getUserTickets = cache(async (): Promise<TicketItem[]> => {
         });
     } catch (error) {
         console.error("[getUserTickets]", error);
+        return [];
+    }
+});
+
+export const getUserPaymentIssues = cache(async (): Promise<PaymentIssueItem[]> => {
+    try {
+        const { userId } = await auth();
+        if (!userId) return [];
+
+        await connectToDatabase();
+
+        const orders = await Order.find({
+            clerkId: userId,
+            status: "paid",
+            fulfillmentStatus: { $in: ["refund_required", "refunded"] },
+        })
+            .populate("eventId", "title")
+            .sort({ createdAt: -1 })
+            .lean();
+
+        return orders.map((order: any) => ({
+            id: order._id.toString(),
+            eventTitle: order.eventId?.title ?? order.eventTitle,
+            amount: paiseToRupees(order.amount),
+            status: order.fulfillmentStatus,
+            createdAt: order.createdAt,
+            refundedAt: order.refundedAt,
+        }));
+    } catch (error) {
+        console.error("[getUserPaymentIssues]", error);
         return [];
     }
 });

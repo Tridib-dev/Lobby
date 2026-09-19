@@ -104,10 +104,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Payment details could not be verified" }, { status: 400 });
         }
 
-        let result: { orderId: string };
+        let orderId: string;
         try {
             if (typeof eventDoc.capacity === "number") {
-                result = await confirmPaidRegistration({
+                const result = await confirmPaidRegistration({
                     eventId,
                     clerkId: userId,
                     eventTitle: eventDoc.title,
@@ -117,6 +117,32 @@ export async function POST(req: NextRequest) {
                     razorpayPaymentId: razorpay_payment_id,
                     razorpaySignature: razorpay_signature,
                 });
+
+                if (result.status === "refund_required") {
+                    return NextResponse.json(
+                        {
+                            ok: false,
+                            requiresRefund: true,
+                            orderId: result.orderId,
+                            message:
+                                "Your payment was received after the reservation expired. The payment has been flagged for refund.",
+                        },
+                        { status: 409 }
+                    );
+                }
+
+                if (result.status === "refunded") {
+                    return NextResponse.json(
+                        {
+                            ok: false,
+                            orderId: result.orderId,
+                            message: "This payment has already been refunded.",
+                        },
+                        { status: 409 }
+                    );
+                }
+
+                orderId = result.orderId;
             } else {
                 const legacy = await createOrder({
                     eventId,
@@ -127,8 +153,10 @@ export async function POST(req: NextRequest) {
                     razorpayPaymentId: razorpay_payment_id,
                     razorpaySignature: razorpay_signature,
                 });
+
                 if (!legacy.success) throw new Error(legacy.error);
-                result = { orderId: legacy.order._id.toString() };
+
+                orderId = legacy.order._id.toString();
             }
         } catch (error) {
             if (error instanceof InventoryError) {
@@ -152,7 +180,7 @@ export async function POST(req: NextRequest) {
                 eventDate: eventDoc?.date ?? "",
                 eventTime: eventDoc?.time ?? "",
                 eventLocation: eventDoc?.location ?? "",
-                ticketId: result.orderId,
+                ticketId: orderId,
                 paymentId: razorpay_payment_id,
                 amount: paiseToRupees(amountPaise),
                 eventSlug: eventDoc.slug,
@@ -163,7 +191,7 @@ export async function POST(req: NextRequest) {
             });
         }
         
-        return NextResponse.json({ success: true, orderId: result.orderId });
+        return NextResponse.json({ success: true, orderId: orderId });
     } catch (error) {
         console.error("[Razorpay verify]", error);
         return NextResponse.json({ error: "Verification failed" }, { status: 500 });
