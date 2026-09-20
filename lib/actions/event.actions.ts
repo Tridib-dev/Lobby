@@ -126,23 +126,45 @@ export const createEvent = async (data: Omit<IEvent, '_id' | 'slug' | 'createdAt
         const { userId } = await auth();
         if (!userId) throw new Error("Unauthorized");
 
-        await connectToDatabase();
+        const db = await connectToDatabase();
 
         // Track how many events this user has hosted (for billing)
-        const user = await User.findOneAndUpdate(
+        const user = await User.findOne(
             { clerkId: userId },
-            { $inc: { eventsHostedCount: 1 } },
-            { returnDocument: "after" }
         ).select("eventsHostedCount username");
 
-        const isFirstEvent = (user?.eventsHostedCount ?? 1) === 1;
+        if (!user) throw new Error("Creator profile not found");
 
         // Future: if !isFirstEvent → charge platform fee before proceeding
 
-        const event = await Event.create({
-            ...data,
-            creatorClerkId: userId,
-        });
+        const session = await db.startSession();
+        let transactionResult;
+
+        try {
+            transactionResult = await session.withTransaction(async () => {
+                const [createdEvent] = await Event.create([{
+                    ...data,
+                    creatorClerkId: userId,
+                }], { session });
+
+                const nextUser = await User.findOneAndUpdate(
+                    { clerkId: userId },
+                    { $inc: { eventsHostedCount: 1 } },
+                    { new: true, session }
+                ).select("eventsHostedCount username");
+
+                if (!nextUser) throw new Error("Creator profile disappeared during event creation");
+
+                return { event: createdEvent, updatedUser: nextUser };
+            });
+        } finally {
+            await session.endSession();
+        }
+
+        if (!transactionResult) throw new Error("Event creation transaction returned no result");
+
+        const { event, updatedUser } = transactionResult;
+        const isFirstEvent = updatedUser.eventsHostedCount === 1;
 
         await notifyFollowersOfNewEvent({
             creatorClerkId: userId,
@@ -151,8 +173,8 @@ export const createEvent = async (data: Omit<IEvent, '_id' | 'slug' | 'createdAt
             eventTitle: event.title,
         });
 
-        if (user?.username) {
-            revalidatePath(`/profile/${user.username}`);
+        if (updatedUser.username) {
+            revalidatePath(`/profile/${updatedUser.username}`);
         }
 
         return { 

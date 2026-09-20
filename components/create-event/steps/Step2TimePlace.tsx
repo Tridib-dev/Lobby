@@ -26,11 +26,16 @@ const Step2TimePlace = ({ draft, onUpdate }: Step2Props) => {
   }, [draft.timezone]);
 
 useEffect(() => {
+      // Invalidate any in-flight lookup before checking whether the new
+      // location is complete. Otherwise a response for the previous
+      // location could still pass the stale-response check.
+      const currentRequestId = ++requestIdRef.current;
+
       if (!countryCode || !stateCode || !city) {
+        onUpdate({ timezone: "" });
         return;
       }
 
-      const currentRequestId = ++requestIdRef.current;
       // Clear any previous/default timezone immediately when location changes.
       onUpdate({ timezone: "" });
 
@@ -90,7 +95,9 @@ useEffect(() => {
     stateCode,
   });
 
-  const hasLocation = Boolean(city);
+  // Treat an incomplete location as having no active lookup. This also
+  // hides any stale pending/error state while the user is selecting again.
+  const hasLocation = Boolean(countryCode && stateCode && city);
   const isTimezonePending = hasLocation && isResolvingTimezone;
   const hasTimezoneLookupFailed = hasLocation && timezoneLookupFailed;
 

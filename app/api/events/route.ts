@@ -98,11 +98,8 @@ const uploadEventImage = async ({
  * straight from Clerk and create it here instead of failing the request.
  */
 const getOrCreateUser = async (userId: string) => {
-    let creator = await User.findOneAndUpdate(
-        { clerkId: userId },
-        { $inc: { eventsHostedCount: 1 } },
-        { returnDocument: "after" }
-    ).select("username firstName lastName photo eventsHostedCount");
+    let creator = await User.findOne({ clerkId: userId })
+        .select("username firstName lastName photo eventsHostedCount");
 
     if (creator) return creator;
 
@@ -125,17 +122,14 @@ const getOrCreateUser = async (userId: string) => {
             photo: clerkUser.imageUrl ?? "",
             onboarded: false,
             onboardingStep: 0,
-            eventsHostedCount: 1,
+            eventsHostedCount: 0,
         });
     } catch (err) {
         // The webhook may have inserted the row in the split-second between
-        // our findOneAndUpdate above and this create — re-fetch instead of failing.
+        // our lookup and this create — re-fetch instead of failing.
         if (isDuplicateKeyError(err)) {
-            creator = await User.findOneAndUpdate(
-                { clerkId: userId },
-                { $inc: { eventsHostedCount: 1 } },
-                { returnDocument: "after" }
-            ).select("username firstName lastName photo eventsHostedCount");
+            creator = await User.findOne({ clerkId: userId })
+                .select("username firstName lastName photo eventsHostedCount");
         } else {
             throw err;
         }
@@ -177,8 +171,6 @@ export async function POST(req: NextRequest) {
                 { status: 404 }
             );
         }
-        const isFirstEvent = (creator.eventsHostedCount ?? 1) === 1;
-
         const organizerEmails = formData.getAll("organizerEmails") as string[];
         const emailCheck = await validateEmails(organizerEmails);
         if (!emailCheck.valid) {
@@ -284,35 +276,64 @@ export async function POST(req: NextRequest) {
             const eventTimeField = String(eventFields.time ?? "");
             const eventTimezoneField = String(eventFields.timezone ?? "Asia/Kolkata");
 
-            const create_event = await Event.create({
-                title: String(eventFields.title ?? ""),
-                slug,
-                description: String(eventFields.description ?? ""),
-                overview: String(eventFields.overview ?? ""),
-                image: uploadResult.url,
-                slideshowImages,
-                venue: String(eventFields.venue ?? ""),
-                location: String(eventFields.location ?? ""),
-                address: String(eventFields.address ?? ""),
-                city: String(eventFields.city ?? ""),
-                state: String(eventFields.state ?? ""),
-                country: String(eventFields.country ?? ""),
-                category: String(eventFields.category ?? "") as EventCategory,
-                date: eventDateField,
-                time: eventTimeField,
-                mode: String(eventFields.mode ?? ""),
-                audience,
-                price: Number(eventFields.price ?? 0),
-                capacity,
-                sponsors: JSON.parse(formData.get('sponsors') as string || '[]'),
-                organizer: String(eventFields.organizer ?? ""),
-                timezone: eventTimezoneField,
-                startAtUTC: getEventStartUTC(eventDateField, eventTimeField, eventTimezoneField),
-                tags,
-                agenda,
-                organizerEmails,
-                creatorClerkId: userId,
-            });
+            const db = await connectToDatabase();
+            const session = await db.startSession();
+            let transactionResult;
+
+            try {
+                transactionResult = await session.withTransaction(async () => {
+                    const [createdEvent] = await Event.create([{
+                        title: String(eventFields.title ?? ""),
+                        slug,
+                        description: String(eventFields.description ?? ""),
+                        overview: String(eventFields.overview ?? ""),
+                        image: uploadResult.url,
+                        slideshowImages,
+                        venue: String(eventFields.venue ?? ""),
+                        location: String(eventFields.location ?? ""),
+                        address: String(eventFields.address ?? ""),
+                        city: String(eventFields.city ?? ""),
+                        state: String(eventFields.state ?? ""),
+                        country: String(eventFields.country ?? ""),
+                        category: String(eventFields.category ?? "") as EventCategory,
+                        date: eventDateField,
+                        time: eventTimeField,
+                        mode: String(eventFields.mode ?? ""),
+                        audience,
+                        price: Number(eventFields.price ?? 0),
+                        capacity,
+                        sponsors: JSON.parse(formData.get('sponsors') as string || '[]'),
+                        organizer: String(eventFields.organizer ?? ""),
+                        timezone: eventTimezoneField,
+                        startAtUTC: getEventStartUTC(eventDateField, eventTimeField, eventTimezoneField),
+                        tags,
+                        agenda,
+                        organizerEmails,
+                        creatorClerkId: userId,
+                    }], { session });
+
+                    const nextCreator = await User.findOneAndUpdate(
+                        { clerkId: userId },
+                        { $inc: { eventsHostedCount: 1 } },
+                        { new: true, session }
+                    ).select("username firstName lastName photo eventsHostedCount");
+
+                    if (!nextCreator) {
+                        throw new Error("Creator profile disappeared during event creation.");
+                    }
+
+                    return { create_event: createdEvent, updatedCreator: nextCreator };
+                });
+            } finally {
+                await session.endSession();
+            }
+
+            if (!transactionResult) {
+                throw new Error("Event creation transaction returned no result.");
+            }
+
+            const { create_event, updatedCreator } = transactionResult;
+            const isFirstEvent = updatedCreator.eventsHostedCount === 1;
 
             // Co-organizer invites: pending until the invitee accepts. Only
             // accepted co-organizers are written to CoOrganizer (what
@@ -343,8 +364,8 @@ export async function POST(req: NextRequest) {
             });
 
             revalidateTag("events", "default");
-            if (creator.username) {
-                revalidatePath(`/profile/${creator.username}`);
+            if (updatedCreator.username) {
+                revalidatePath(`/profile/${updatedCreator.username}`);
             }
             return NextResponse.json({
                 message: 'Event Created Successfully',

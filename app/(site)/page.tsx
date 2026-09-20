@@ -14,7 +14,14 @@ const Page = async () => {
   // directly instead of making a server-to-server request to our own API.
   // The old request could hit localhost during build/deploy and produce
   // ECONNREFUSED even though the deployed app itself was healthy.
-  const { events } = await getDiscoverEvents({ limit: 8 });
+  let events: Awaited<ReturnType<typeof getDiscoverEvents>>["events"] = [];
+  try {
+    ({ events } = await getDiscoverEvents({ limit: 8 }));
+  } catch (error) {
+    // The landing page is still useful without featured events. Preserve the
+    // previous graceful-degradation behavior if MongoDB or the loader fails.
+    console.error("[Home] Failed to load featured events:", error);
+  }
  
   return (
     <section>
