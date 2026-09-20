@@ -17,6 +17,7 @@ import { resolveEventSchedule } from "@/lib/time";
 export type RoomPhase = "not_configured" | "locked" | "lobby" | "live" | "ended";
 
 const LOBBY_OPEN_MINUTES_BEFORE = 30;
+const STREAM_ROOM_CALL_TYPE = "event-room";
 
 function toStreamRole(role: RoomMemberRole): "call_member" | "admin" {
   if (role === "organizer" || role === "co-organizer") return "admin";
@@ -103,16 +104,32 @@ export async function createRoom(
     const event = await Event.findById(eventId).lean();
     if (!event) return { success: false, reason: "not_found" };
 
-    const existing = await Room.findOne({ eventId }).lean();
-    if (existing) return { success: true, roomId: existing._id.toString() };
-
     const { userId } = await auth();
     if (!userId) return { success: false, reason: "unauthorized" };
 
     const streamCallId = `event-${eventId}`;
     const client = getServerStreamClient();
 
-    await client.video.call("event-room", streamCallId).getOrCreate({
+    const existing = await Room.findOne({ eventId });
+    if (existing) {
+      // Older deployments could persist a different Stream call type (for
+      // example `audio_room`). Repair only rooms that have not gone live yet;
+      // changing the type of a live call would split active participants.
+      if (existing.streamCallType !== STREAM_ROOM_CALL_TYPE && existing.status !== "live") {
+        await client.video.call(STREAM_ROOM_CALL_TYPE, existing.streamCallId).getOrCreate({
+          data: {
+            created_by_id: userId,
+            members: [{ user_id: userId, role: "admin" }],
+            custom: { eventId },
+          },
+        });
+        existing.streamCallType = STREAM_ROOM_CALL_TYPE;
+        await existing.save();
+      }
+      return { success: true, roomId: existing._id.toString() };
+    }
+
+    await client.video.call(STREAM_ROOM_CALL_TYPE, streamCallId).getOrCreate({
       data: {
         created_by_id: userId,
         members: [{ user_id: userId, role: "admin" }],
@@ -146,7 +163,7 @@ export async function createRoom(
     const room = await Room.create({
       eventId,
       streamCallId,
-      streamCallType: "event-room",
+      streamCallType: STREAM_ROOM_CALL_TYPE,
       scheduledStart,
       scheduledEnd,
       status: "scheduled",
@@ -366,8 +383,14 @@ export async function ensureRoomForEvent(eventId: string): Promise<RoomPublicMet
     const canonicalStart = eventSchedule.instant;
     const canonicalEnd = new Date(canonicalStart.getTime() + DEFAULT_ROOM_DURATION_MS);
 
-    const existing = await Room.findOne({ eventId }).select("scheduledStart scheduledEnd status").lean();
+    const existing = await Room.findOne({ eventId }).select("scheduledStart scheduledEnd status streamCallType").lean();
     if (existing) {
+      if (existing.streamCallType !== STREAM_ROOM_CALL_TYPE && existing.status !== "live" && (await isGateAuthorized(eventId))) {
+        // Route legacy scheduled rooms through createRoom so the old Stream
+        // call type is repaired before the room becomes live.
+        await createRoom(eventId, existing.scheduledStart, existing.scheduledEnd);
+      }
+
       // A room is created once, but the event schedule may be edited later.
       // Reconcile only scheduled rooms; never move a live, ended, or cancelled
       // room while people may be relying on its current lifecycle state.
