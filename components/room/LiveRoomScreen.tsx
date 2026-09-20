@@ -758,12 +758,17 @@ function QaPanel({
 }
 
 function DeviceButtons({ setDeviceError }: { setDeviceError: (value: string | null) => void }) {
-  const { useCameraState, useMicrophoneState } = useCallStateHooks();
+  const { useCameraState, useMicrophoneState, useHasPermissions } = useCallStateHooks();
   const { camera, isMute: camMuted, hasBrowserPermission: hasCamPermission } = useCameraState();
   const { microphone, isMute: micMuted, hasBrowserPermission: hasMicPermission } = useMicrophoneState();
+  const canPublishVideo = useHasPermissions("send-video");
 
   async function toggleCamera() {
     setDeviceError(null);
+    if (!canPublishVideo) {
+      setDeviceError("Your Stream room role cannot publish video. Enable Send video for the organizer role in the event-room call type.");
+      return;
+    }
     try {
       await camera.toggle();
     } catch (error: unknown) {
@@ -796,8 +801,11 @@ function DeviceButtons({ setDeviceError }: { setDeviceError: (value: string | nu
       </button>
       <button
         onClick={toggleCamera}
+        aria-disabled={!canPublishVideo}
         className={`flex h-11 items-center gap-2 rounded-full px-4 text-sm font-medium ${
-          camMuted || !hasCamPermission ? "bg-[#262B35] text-[#8891A3]" : "bg-[#1B1F27] text-[#F3F5F8]"
+          camMuted || !hasCamPermission || !canPublishVideo
+            ? "bg-[#262B35] text-[#8891A3]"
+            : "bg-[#1B1F27] text-[#F3F5F8]"
         }`}
         aria-label={camMuted ? "Turn on camera" : "Turn off camera"}
       >

@@ -228,11 +228,14 @@ export async function joinRoom(eventId: string): Promise<JoinRoomResult> {
       { roomId: room._id, clerkId },
       {
         $setOnInsert: {
-          role: initialRole,
           ticketId: ticketRef?.ticketId,
           ticketType: ticketRef?.ticketType,
         },
-        $set: { joinedAt: new Date(), leftAt: null },
+        // Keep the database role synchronized with current authorization. A
+        // user who was previously an attendee may become an organizer later;
+        // leaving the old role in place would make Stream assign call_member
+        // and deny video publishing.
+        $set: { role: initialRole, joinedAt: new Date(), leftAt: null },
       },
       { upsert: true, returnDocument: "after" }
     );
