@@ -766,7 +766,7 @@ function DeviceButtons({ setDeviceError }: { setDeviceError: (value: string | nu
     try {
       await camera.toggle();
     } catch {
-      setDeviceError("Camera permission denied or unavailable. Check site permissions.");
+      setDeviceError("Camera could not be enabled. Allow camera access in the browser and check that no other app is using it.");
     }
   }
 
@@ -775,7 +775,7 @@ function DeviceButtons({ setDeviceError }: { setDeviceError: (value: string | nu
     try {
       await microphone.toggle();
     } catch {
-      setDeviceError("Microphone permission denied or unavailable. Check site permissions.");
+      setDeviceError("Microphone could not be enabled. Allow microphone access in the browser and check that no other app is using it.");
     }
   }
 

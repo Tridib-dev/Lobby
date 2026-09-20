@@ -40,8 +40,20 @@ function PreJoinScreenInner({
   onJoin,
 }: Omit<PreJoinScreenProps, "call">) {
   const { useCameraState, useMicrophoneState } = useCallStateHooks();
-  const { camera, isMute: cameraMuted, hasBrowserPermission: hasCameraPermission } = useCameraState();
-  const { microphone, isMute: micMuted, hasBrowserPermission: hasMicPermission } = useMicrophoneState();
+  const {
+    camera,
+    isMute: cameraMuted,
+    hasBrowserPermission: hasCameraPermission,
+    isPromptingPermission: isPromptingCameraPermission,
+    isTogglePending: isCameraTogglePending,
+  } = useCameraState();
+  const {
+    microphone,
+    isMute: micMuted,
+    hasBrowserPermission: hasMicPermission,
+    isPromptingPermission: isPromptingMicPermission,
+    isTogglePending: isMicTogglePending,
+  } = useMicrophoneState();
   const [devicesReady, setDevicesReady] = useState(() => !isOrganizerTier);
   const [deviceError, setDeviceError] = useState<string | null>(null);
 
@@ -55,7 +67,7 @@ function PreJoinScreenInner({
     Promise.allSettled([camera.enable(), microphone.disable()]).then(([cameraResult]) => {
       if (!cancelled) {
         if (cameraResult.status === "rejected") {
-          setDeviceError("Camera could not be enabled. Check browser and device permissions.");
+          setDeviceError("Camera could not be enabled. Allow camera access in the browser and check that no other app is using it.");
         }
         setDevicesReady(true);
       }
@@ -90,7 +102,7 @@ function PreJoinScreenInner({
             <button
               type="button"
               onClick={() => camera.toggle()}
-              disabled={!devicesReady || hasCameraPermission === false}
+              disabled={!devicesReady || isCameraTogglePending}
               className={`flex h-11 w-11 items-center justify-center rounded-full ${
                 cameraMuted ? "bg-[#1B1F27] text-[#8891A3]" : "bg-[#4f46e5] text-[#0A0C10]"
               } disabled:opacity-50`}
@@ -102,7 +114,7 @@ function PreJoinScreenInner({
             <button
               type="button"
               onClick={() => microphone.toggle()}
-              disabled={!devicesReady || hasMicPermission === false}
+              disabled={!devicesReady || isMicTogglePending}
               className={`flex h-11 w-11 items-center justify-center rounded-full ${
                 micMuted ? "bg-[#1B1F27] text-[#8891A3]" : "bg-[#4f46e5] text-[#0A0C10]"
               } disabled:opacity-50`}
@@ -113,12 +125,18 @@ function PreJoinScreenInner({
             </button>
           </div>
 
-          {(hasCameraPermission === false || hasMicPermission === false) && (
+          {(isPromptingCameraPermission || isPromptingMicPermission) && (
             <p className="max-w-xs text-xs text-[#8891A3]">
-              Camera/mic permission was denied in the browser — you can still join and enable them later from the
-              controls bar.
+              Waiting for browser permission. Choose Allow for the camera or microphone prompt to continue.
             </p>
           )}
+          {!isPromptingCameraPermission && !isPromptingMicPermission &&
+            (hasCameraPermission === false || hasMicPermission === false) && (
+              <p className="max-w-xs text-xs text-[#8891A3]">
+                Camera or microphone access is not available yet. Use the controls to retry, or allow access in the
+                browser&apos;s site settings.
+              </p>
+            )}
           {deviceError && <p className="max-w-xs text-xs text-[#FF5468]">{deviceError}</p>}
         </div>
       ) : (
