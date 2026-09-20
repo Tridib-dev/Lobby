@@ -1434,7 +1434,7 @@ function LiveRoomScreenContent({
   const { useScreenShareState, useParticipants, usePinnedParticipants, useHasOngoingScreenShare, useCameraState, useMicrophoneState, useLocalParticipant } =
     useCallStateHooks();
   const { screenShare } = useScreenShareState();
-  const { camera } = useCameraState();
+  const { camera, isMute: camMuted } = useCameraState();
   const { microphone } = useMicrophoneState();
   const participants = useParticipants();
   const pinnedParticipants = usePinnedParticipants();
@@ -1552,9 +1552,14 @@ function LiveRoomScreenContent({
       if (autoStartDevicesRef.current) return;
       autoStartDevicesRef.current = true;
 
-      camera.enable().catch((err: unknown) => {
-        console.warn("[LiveRoomScreen] auto camera enable failed", err);
-      });
+      // Preserve the organizer's pre-join camera choice. If they left the
+      // camera off, do not issue a second automatic browser permission request
+      // immediately after joining the call.
+      if (!camMuted) {
+        camera.enable().catch((err: unknown) => {
+          console.warn("[LiveRoomScreen] auto camera enable failed", err);
+        });
+      }
 
       microphone.enable().catch((err: unknown) => {
         console.warn("[LiveRoomScreen] auto microphone enable failed", err);
@@ -1575,7 +1580,7 @@ function LiveRoomScreenContent({
     microphone.disable().catch((err: unknown) => {
       console.warn("[LiveRoomScreen] attendee microphone disable failed", err);
     });
-  }, [canModerate, camera, microphone]);
+  }, [canModerate, camMuted, camera, microphone]);
 
   function handleToggleScreenShare() {
     screenShare

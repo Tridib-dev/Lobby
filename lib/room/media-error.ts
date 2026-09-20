@@ -6,6 +6,12 @@ function errorName(error: unknown) {
   return typeof name === "string" ? name : "";
 }
 
+function errorMessage(error: unknown) {
+  if (!error || typeof error !== "object") return "";
+  const message = "message" in error ? error.message : undefined;
+  return typeof message === "string" ? message.trim() : "";
+}
+
 export function describeMediaDeviceError(kind: MediaDeviceKind, error: unknown) {
   const name = errorName(error);
   const device = kind === "camera" ? "camera" : "microphone";
@@ -24,7 +30,10 @@ export function describeMediaDeviceError(kind: MediaDeviceKind, error: unknown) 
       return `The browser blocked ${device} access because this page is not running in a permitted secure context.`;
     case "OverconstrainedError":
       return `The available ${device} does not meet the requested settings.`;
-    default:
-      return `${device[0].toUpperCase()}${device.slice(1)} could not be enabled${name ? ` (${name})` : ""}. Check browser and device settings.`;
+    default: {
+      const message = errorMessage(error);
+      const detail = message && message !== name ? `: ${message}` : name ? ` (${name})` : "";
+      return `${device[0].toUpperCase()}${device.slice(1)} could not be enabled${detail}. Check browser and device settings.`;
+    }
   }
 }

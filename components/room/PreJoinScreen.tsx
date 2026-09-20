@@ -58,28 +58,24 @@ function PreJoinScreenInner({
   const [devicesReady, setDevicesReady] = useState(() => !isOrganizerTier);
   const [deviceError, setDeviceError] = useState<string | null>(null);
 
-  // Organizer tier gets a live preview by default (camera on, mic off —
-  // most people don't want to broadcast audio while they're still
-  // fiddling with settings). Attendees can't publish at all, so there's
-  // nothing to preview or toggle for them.
+  // Do not request camera access automatically on mount. A failed or dismissed
+  // automatic request can leave the SDK's permission state stale, while a
+  // user-triggered toggle gives the browser a clean permission interaction.
+  // The microphone remains off until the user explicitly enables it.
   useEffect(() => {
     if (!isOrganizerTier) return;
     let cancelled = false;
-    Promise.allSettled([camera.enable(), microphone.disable()]).then(([cameraResult]) => {
-      if (!cancelled) {
-        if (cameraResult.status === "rejected") {
-          console.error("[PreJoinScreen] camera enable failed", cameraResult.reason);
-          setDeviceError(describeMediaDeviceError("camera", cameraResult.reason));
-        }
-        setDevicesReady(true);
-      }
+    microphone.disable().catch((error: unknown) => {
+      console.error("[PreJoinScreen] microphone disable failed", error);
+    });
+    queueMicrotask(() => {
+      if (!cancelled) setDevicesReady(true);
     });
     return () => {
       cancelled = true;
     };
-    // Only run once when entering the pre-join screen as organizer tier.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOrganizerTier]);
+    // Run when the organizer call/device manager becomes available.
+  }, [isOrganizerTier, microphone]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#0A0C10] px-6 py-10 text-center text-[#F3F5F8]">
