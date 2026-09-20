@@ -758,15 +758,18 @@ function QaPanel({
 }
 
 function DeviceButtons({ setDeviceError }: { setDeviceError: (value: string | null) => void }) {
-  const { useCameraState, useMicrophoneState, useHasPermissions } = useCallStateHooks();
+  const { useCameraState, useMicrophoneState, useHasPermissions, useCallState } = useCallStateHooks();
   const { camera, isMute: camMuted, hasBrowserPermission: hasCamPermission } = useCameraState();
   const { microphone, isMute: micMuted, hasBrowserPermission: hasMicPermission } = useMicrophoneState();
   const canPublishVideo = useHasPermissions("send-video");
+  const { ownCapabilities } = useCallState();
 
   async function toggleCamera() {
     setDeviceError(null);
     if (!canPublishVideo) {
-      setDeviceError("Your Stream room role cannot publish video. Enable Send video for the organizer role in the event-room call type.");
+      const capabilities = ownCapabilities.length > 0 ? ownCapabilities.join(", ") : "none";
+      console.error("[LiveRoomScreen] Stream denied video publishing", { ownCapabilities });
+      setDeviceError(`Stream denied video publishing. Effective capabilities: ${capabilities}.`);
       return;
     }
     try {
