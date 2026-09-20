@@ -1,6 +1,7 @@
 // app/api/verify/route.ts
 
 
+import { connection } from "next/server";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyTicket } from "@/lib/actions/gate.actions";
 
@@ -13,10 +14,13 @@ function getQueryValue(url: URL, keys: string[]): string {
 }
 
 export async function GET(request: NextRequest) {
+    // This endpoint depends on the incoming query string and must never be
+    // evaluated as part of a prerendered Cache Components shell.
+    await connection();
+
     try {
-        const url = new URL(request.url);
-        const ticketId = getQueryValue(url, ["id", "ticketId"]);
-        const eventId = getQueryValue(url, ["eventId"]);
+        const ticketId = getQueryValue(request.nextUrl, ["id", "ticketId"]);
+        const eventId = getQueryValue(request.nextUrl, ["eventId"]);
 
         if (!ticketId || !eventId) {
             return NextResponse.json(

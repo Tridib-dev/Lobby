@@ -12,16 +12,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { ArrowLeft } from "lucide-react";
 import GateStats from "./GateStats";
 import GateTabs from "./GateTabs";
 import ScannerPanel from "./ScannerPanel";
 import AttendeeList from "./AttendeeList";
 import { formatClockTime } from "./gate-format";
-
-const display = Space_Grotesk({ subsets: ["latin"], weight: ["500", "700"], variable: "--font-display" });
-const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--font-mono" });
 
 type GateTab = "scanner" | "attendees";
 
@@ -66,9 +62,11 @@ export default function GateShell({
 
   return (
     <div
-      className={`${display.variable} ${mono.variable} ${embedded ? "min-h-0" : "min-h-screen"} bg-[var(--gv-bg)] text-[var(--gv-ink)] rounded-2xl border border-white/8 overflow-hidden`}
+      className={`${embedded ? "min-h-0" : "min-h-screen"} bg-[var(--gv-bg)] text-[var(--gv-ink)] rounded-2xl border border-white/8 overflow-hidden`}
       style={
         {
+          "--font-display": "Inter, sans-serif",
+          "--font-mono": "JetBrains Mono, Consolas, monospace",
           "--gv-bg": "#0A0C10",
           "--gv-panel": "#14171D",
           "--gv-panel-2": "#1B1F27",

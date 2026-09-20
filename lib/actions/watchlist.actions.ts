@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import connectToDatabase from "@/lib/mongodb";
 import { Watchlist } from "@/database/watchlist.model";
+import { connection } from "next/server";
 
 // Toggle save/unsave — returns new saved state
 export const toggleWatchlist = async (eventId: string): Promise<{
@@ -47,6 +48,7 @@ export const isEventSaved = async (eventId: string): Promise<boolean> => {
 
 // Get all saved events for the current user (for dashboard)
 export const getSavedEvents = async () => {
+    await connection();
     try {
         const { userId } = await auth();
         if (!userId) return [];

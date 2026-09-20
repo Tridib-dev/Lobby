@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { EventDraft } from "../types";
 import ModeCards from "../fields/ModeCards";
 import LocationFields from "../fields/LocationFields";
@@ -13,6 +13,9 @@ interface Step2Props {
 
 const Step2TimePlace = ({ draft, onUpdate }: Step2Props) => {
   const requestIdRef = useRef(0);
+  const [isResolvingTimezone, setIsResolvingTimezone] = useState(false);
+  const [timezoneLookupFailed, setTimezoneLookupFailed] = useState(false);
+  const { countryCode, stateCode, city } = draft.location;
 
   const timezoneOptions = useMemo(() => {
     const supported = Intl.supportedValuesOf("timeZone");
@@ -23,17 +26,22 @@ const Step2TimePlace = ({ draft, onUpdate }: Step2Props) => {
   }, [draft.timezone]);
 
 useEffect(() => {
-      const { countryCode, stateCode, city } = draft.location;
-      
+      // Invalidate any in-flight lookup before checking whether the new
+      // location is complete. Otherwise a response for the previous
+      // location could still pass the stale-response check.
+      const currentRequestId = ++requestIdRef.current;
+
       if (!countryCode || !stateCode || !city) {
+        onUpdate({ timezone: "" });
         return;
       }
 
-      const currentRequestId = ++requestIdRef.current;
       // Clear any previous/default timezone immediately when location changes.
       onUpdate({ timezone: "" });
 
       const timeout = setTimeout(async () => {
+        setIsResolvingTimezone(true);
+        setTimezoneLookupFailed(false);
         try {
           const resolved = await resolveEventTimezoneAction(
             countryCode,
@@ -56,6 +64,8 @@ useEffect(() => {
           onUpdate({
             timezone: resolved ?? "",
           });
+          setIsResolvingTimezone(false);
+          setTimezoneLookupFailed(!resolved);
         } catch (error) {
           if (currentRequestId !== requestIdRef.current) {
             return;
@@ -63,6 +73,8 @@ useEffect(() => {
 
           console.error("TIMEZONE RESOLUTION FAILED:", error);
           onUpdate({ timezone: "" });
+          setIsResolvingTimezone(false);
+          setTimezoneLookupFailed(true);
         }
       }, 600);
 
@@ -70,18 +82,24 @@ useEffect(() => {
         clearTimeout(timeout);
       };
     }, [
-      draft.location.countryCode,
-      draft.location.stateCode,
-      draft.location.city,
+      countryCode,
+      stateCode,
+      city,
       onUpdate,
     ]);
 
   console.log("RENDER TIMEZONE:", {
     draftTimezone: draft.timezone,
-    city: draft.location.city,
-    countryCode: draft.location.countryCode,
-    stateCode: draft.location.stateCode,
+    city,
+    countryCode,
+    stateCode,
   });
+
+  // Treat an incomplete location as having no active lookup. This also
+  // hides any stale pending/error state while the user is selecting again.
+  const hasLocation = Boolean(countryCode && stateCode && city);
+  const isTimezonePending = hasLocation && isResolvingTimezone;
+  const hasTimezoneLookupFailed = hasLocation && timezoneLookupFailed;
 
   return (
     <>
@@ -126,12 +144,19 @@ useEffect(() => {
             disabled={!draft.location.city}
           >
             <option value="" disabled>
-              {draft.location.city ? "Detecting…" : "Select a location first"}
+              {!draft.location.city
+                ? "Select a location first"
+                : isTimezonePending
+                  ? "Detecting…"
+                  : "Select a timezone"}
             </option>
             {timezoneOptions.map((tz) => (
               <option key={tz} value={tz}>{tz}</option>
             ))}
           </select>
+          {hasTimezoneLookupFailed && (
+            <p className="field-hint">Timezone could not be detected. Please select it manually.</p>
+          )}
         </div>
       </div>
     </>

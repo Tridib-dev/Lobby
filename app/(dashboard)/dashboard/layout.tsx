@@ -1,12 +1,16 @@
 import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 
 export const metadata = {
     title: "Dashboard — DevEvent",
 };
 
 async function AuthGuard({ children }: { children: React.ReactNode }) {
+    // Clerk auth reads request headers. Explicitly keep this small dynamic
+    // boundary out of Cache Components prerendering.
+    await connection();
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
     return children;

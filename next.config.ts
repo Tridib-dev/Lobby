@@ -4,9 +4,6 @@ const nextConfig: NextConfig = {
   experimental: {
     authInterrupts: true,
   },
-  typescript : {
-    ignoreBuildErrors : true,
-  },
   cacheComponents : true,
   images: {
     remotePatterns: [

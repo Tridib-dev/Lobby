@@ -12,6 +12,7 @@ import { CoOrganizer } from "@/database/coOrganizer.model";
 import { User } from "@/database/User.model";
 import { DEFAULT_EVENT_TIMEZONE, getEventStartUTC, resolveEventSchedule } from "@/lib/time";
 import { DateTime } from "luxon";
+import { connection } from "next/server";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ function displayMode(mode: string) {
 // ─── Attended analytics ───────────────────────────────────────────────────────
 
 export const getAttendedAnalytics = cache(async (): Promise<AttendedAnalyticsData> => {
+    await connection();
     const empty: AttendedAnalyticsData = {
         lifetime: 0, thisYear: 0, thisMonth: 0, upcomingCount: 0,
         nextEvent: null, nextEventCountdown: null, totalSpent: 0, avgTicketPrice: 0,
@@ -284,6 +286,7 @@ export const getAttendedAnalytics = cache(async (): Promise<AttendedAnalyticsDat
 // ─── Organized analytics ──────────────────────────────────────────────────────
 
 export const getOrganizedAnalytics = cache(async (): Promise<OrganizedAnalyticsData> => {
+    await connection();
     const empty: OrganizedAnalyticsData = {
         totalEvents: 0, thisMonth: 0, thisYear: 0, totalAttendees: 0, avgAttendeesPerEvent: 0,
         totalRevenue: 0, avgRevenuePerAttendee: 0, checkinRate: 0,
@@ -419,6 +422,7 @@ export const getOrganizedAnalytics = cache(async (): Promise<OrganizedAnalyticsD
 // ─── Event analytics ─────────────────────────────────────────────────────────
 
 export const getEventAnalytics = cache(async (eventId: string): Promise<EventAnalyticsData> => {
+    await connection();
     const empty: EventAnalyticsData = {
         event: null,
         totalBookings: 0,

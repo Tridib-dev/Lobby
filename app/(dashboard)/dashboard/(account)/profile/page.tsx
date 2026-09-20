@@ -9,10 +9,12 @@ import SocialGrid from "@/components/profile/SocialGrid";
 import EventsSection from "@/components/profile/EventsSection";
 import BadgesSection from "@/components/profile/BadgesSection";
 import Link from "next/link";
+import { connection } from "next/server";
 
 export const metadata = { title: "Profile — DevEvent" };
 
 export default async function OwnerProfilePage() {
+    await connection();
     const clerkUser = await currentUser();
     if (!clerkUser) redirect("/sign-in");
 
