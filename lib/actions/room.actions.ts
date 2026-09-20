@@ -126,6 +126,15 @@ export async function createRoom(
         existing.streamCallType = STREAM_ROOM_CALL_TYPE;
         await existing.save();
       }
+      await client.video.call(existing.streamCallType, existing.streamCallId).update({
+        settings_override: {
+          video: {
+            enabled: true,
+            camera_default_on: false,
+            target_resolution: { width: 1280, height: 720 },
+          },
+        },
+      });
       return { success: true, roomId: existing._id.toString() };
     }
 
@@ -153,6 +162,7 @@ export async function createRoom(
             default_device: "speaker",
           },
           video: {
+            enabled: true,
             camera_default_on: false,
             target_resolution: { width: 1280, height: 720 },
           },
@@ -267,6 +277,34 @@ export async function joinRoom(eventId: string): Promise<JoinRoomResult> {
     const client = getServerStreamClient();
 
     // bug #2 fix — 3-way mapping instead of the old binary ternary.
+    // Legacy rooms may point at an audio-only Stream call type. Create the
+    // canonical video-capable call before updating membership, then persist
+    // the corrected type so every subsequent join uses the same call.
+    if (room.streamCallType !== STREAM_ROOM_CALL_TYPE) {
+      await client.video.call(STREAM_ROOM_CALL_TYPE, room.streamCallId).getOrCreate({
+        data: {
+          created_by_id: room.createdByClerkId,
+          members: [{ user_id: room.createdByClerkId, role: "admin" }],
+          custom: { eventId },
+        },
+      });
+      room.streamCallType = STREAM_ROOM_CALL_TYPE;
+      await room.save();
+    }
+
+    // `getOrCreate` does not retroactively repair call-level settings on an
+    // existing call. Explicitly enable video for legacy calls created while
+    // the override omitted `video.enabled`.
+    await client.video.call(room.streamCallType, room.streamCallId).update({
+      settings_override: {
+        video: {
+          enabled: true,
+          camera_default_on: false,
+          target_resolution: { width: 1280, height: 720 },
+        },
+      },
+    });
+
     await client.video.call(room.streamCallType, room.streamCallId).updateCallMembers({
       update_members: [{ user_id: clerkId, role: toStreamRole(effectiveRole) }],
     });
