@@ -2,10 +2,9 @@
 
 import React from "react";
 import { toast } from "sonner";
+import { MIN_EVENT_CAPACITY, isValidEventCapacity } from "@/lib/constants/event-capacity";
 import { EventDraft } from "../types";
 import FreePaidToggle from "../fields/FreePaidToggle";
-
-const MINIMUM_CAPACITY = 5;
 
 interface Step5Props {
   draft: EventDraft;
@@ -15,11 +14,11 @@ interface Step5Props {
 const Step5Tickets = ({ draft, onUpdate }: Step5Props) => {
   const hasInvalidCapacity =
     draft.hasCapacityLimit &&
-    (!Number.isSafeInteger(draft.capacity) || (draft.capacity ?? 0) < MINIMUM_CAPACITY);
+    !isValidEventCapacity(draft.capacity);
 
   const showCapacityError = () => {
     if (hasInvalidCapacity) {
-      toast.error(`Registration limit must be at least ${MINIMUM_CAPACITY}.`);
+      toast.error(`Registration limit must be at least ${MIN_EVENT_CAPACITY}.`);
     }
   };
 
@@ -42,7 +41,7 @@ const Step5Tickets = ({ draft, onUpdate }: Step5Props) => {
               checked={draft.hasCapacityLimit}
               onChange={(event) => onUpdate({
                 hasCapacityLimit: event.target.checked,
-                capacity: event.target.checked ? Math.max(draft.capacity ?? MINIMUM_CAPACITY, MINIMUM_CAPACITY) : null,
+                capacity: event.target.checked ? Math.max(draft.capacity ?? MIN_EVENT_CAPACITY, MIN_EVENT_CAPACITY) : null,
               })}
               className="mt-1 h-4 w-4 radius-[15px]"
             />
@@ -57,7 +56,7 @@ const Step5Tickets = ({ draft, onUpdate }: Step5Props) => {
               <input
                 id="capacity"
                 type="number"
-                min={MINIMUM_CAPACITY}
+                min={MIN_EVENT_CAPACITY}
                 step={1}
                 inputMode="numeric"
                 value={draft.capacity ?? ""}
@@ -73,7 +72,7 @@ const Step5Tickets = ({ draft, onUpdate }: Step5Props) => {
               />
               {hasInvalidCapacity && (
                 <p id="capacity-error" role="alert" className="mt-1 text-xs text-red-600">
-                  Registration limit must be at least {MINIMUM_CAPACITY} participants.
+                  Registration limit must be at least {MIN_EVENT_CAPACITY} participants.
                 </p>
               )}
             </div>

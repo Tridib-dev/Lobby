@@ -1,6 +1,7 @@
 import { HydratedDocument, Model, Schema, model, models } from "mongoose";
 import { EVENT_CATEGORIES, EventCategory } from "@/lib/constants/event-categories";
 import { DEFAULT_EVENT_TIMEZONE, getEventStartUTC } from "@/lib/time";
+import { MIN_EVENT_CAPACITY, isValidEventCapacity } from "@/lib/constants/event-capacity";
 import { DateTime } from "luxon";
 
 export interface IAgendaItem {
@@ -222,10 +223,10 @@ const eventSchema = new Schema<IEvent>(
     },
     capacity: {
       type: Number,
-      min: 5,
+      min: MIN_EVENT_CAPACITY,
       validate: {
-        validator: (value: number | undefined) => value === undefined || Number.isSafeInteger(value),
-        message: "capacity must be a whole number of at least 5.",
+        validator: (value: number | undefined) => value === undefined || isValidEventCapacity(value),
+        message: `capacity must be a whole number of at least ${MIN_EVENT_CAPACITY}.`,
       },
     },
     confirmedRegistrationCount: { type: Number, default: 0, min: 0 },

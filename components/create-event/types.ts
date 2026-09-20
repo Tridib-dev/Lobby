@@ -3,6 +3,7 @@ import type { AgendaItemInput } from "./fields/AgendaFields";
 import type { SponsorItemInput } from "./fields/SponsorFields";
 import type { LocationValue } from "./fields/LocationFields";
 import { ProfileRowUser } from "../profileCard";
+import { isValidEventCapacity } from "@/lib/constants/event-capacity";
 
 export type EventMode = "In-Person" | "Online" | "Hybrid (In-Person & Online)";
 
@@ -138,7 +139,7 @@ export const validateStep = (draft: EventDraft, step: WizardStepKey): boolean =>
       return draft.audience.length > 0 && draft.tags.length > 0 && validAgenda.length > 0;
     }
     case "tickets":
-      return (draft.isFree || draft.price > 0) && (!draft.hasCapacityLimit || (Number.isSafeInteger(draft.capacity) && (draft.capacity ?? 0) >= 5));
+      return (draft.isFree || draft.price > 0) && (!draft.hasCapacityLimit || isValidEventCapacity(draft.capacity));
     case "organizer":
       return draft.organizer.trim().length > 0 && draft.organizerEmails.length > 0;
     case "review":

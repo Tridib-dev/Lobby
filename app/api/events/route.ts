@@ -13,6 +13,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { notifyFollowersOfNewEvent } from "@/lib/notifications";
 import { getEventStartUTC } from "@/lib/time";
 import { sendCoOrganizerInvites } from "@/lib/co-organizer-invites";
+import { MIN_EVENT_CAPACITY, isValidEventCapacity } from "@/lib/constants/event-capacity";
 
 
 type AgendaItem = {
@@ -30,7 +31,6 @@ type ImageKitUploadResult = {
 
 const MAX_IMAGE_FILE_SIZE = 3 * 1024 * 1024;
 const MAX_SLIDESHOW_IMAGES = 3;
-const MINIMUM_CAPACITY = 5;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
 
 const isDuplicateKeyError = (error: unknown): boolean =>
@@ -38,6 +38,12 @@ const isDuplicateKeyError = (error: unknown): boolean =>
     error !== null &&
     "code" in error &&
     (error as { code?: number }).code === 11000;
+
+const isCapacityValidationError = (error: unknown): boolean =>
+    typeof error === "object" &&
+    error !== null &&
+    "errors" in error &&
+    typeof (error as { errors?: Record<string, unknown> }).errors?.capacity !== "undefined";
 
 const getImageKitFileId = (uploadResult: ImageKitUploadResult): string | undefined =>
     uploadResult.fileId || uploadResult.file_id || uploadResult.fileID;
@@ -146,17 +152,6 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
 
-        // ==================== CREATOR PROFILE (self-healing) ====================
-        const creator = await getOrCreateUser(userId);
-        if (!creator) {
-            return NextResponse.json(
-                { message: "We couldn't find an email on your account yet. Please finish signing up and try again." },
-                { status: 404 }
-            );
-        }
-        const isFirstEvent = (creator.eventsHostedCount ?? 1) === 1;
-        // ==========================================================================
-
         const formData = await req.formData();
 
         const eventFields = Object.fromEntries(formData.entries()) as Record<string, FormDataEntryValue>;
@@ -169,9 +164,19 @@ export async function POST(req: NextRequest) {
         const slug = slugifySegment(title);
         const rawCapacity = String(eventFields.capacity ?? "").trim();
         const capacity = rawCapacity ? Number(rawCapacity) : undefined;
-        if (capacity !== undefined && (!Number.isSafeInteger(capacity) || capacity < MINIMUM_CAPACITY)) {
-            return NextResponse.json({ message: `Capacity must be a whole number of at least ${MINIMUM_CAPACITY}.` }, { status: 400 });
+        if (capacity !== undefined && !isValidEventCapacity(capacity)) {
+            return NextResponse.json({ message: `Capacity must be a whole number of at least ${MIN_EVENT_CAPACITY}.` }, { status: 400 });
         }
+
+        // A rejected capacity must not increment the hosted-event counter.
+        const creator = await getOrCreateUser(userId);
+        if (!creator) {
+            return NextResponse.json(
+                { message: "We couldn't find an email on your account yet. Please finish signing up and try again." },
+                { status: 404 }
+            );
+        }
+        const isFirstEvent = (creator.eventsHostedCount ?? 1) === 1;
 
         const organizerEmails = formData.getAll("organizerEmails") as string[];
         const emailCheck = await validateEmails(organizerEmails);
@@ -348,6 +353,10 @@ export async function POST(req: NextRequest) {
 
             if (isDuplicateKeyError(createErr)) {
                 return NextResponse.json({ message: "An event with this slug already exists" }, { status: 409 });
+            }
+
+            if (isCapacityValidationError(createErr)) {
+                return NextResponse.json({ message: `Capacity must be a whole number of at least ${MIN_EVENT_CAPACITY}.` }, { status: 400 });
             }
 
             console.error('Event creation failed:', createErr);
