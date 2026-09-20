@@ -1,7 +1,7 @@
 // app/events/[slug]/page.tsx
 
 import EventCard from "@/components/EventCard";
-import { getSimilarEventsBySlug } from "@/lib/actions/event.actions";
+import { getEventBySlug, getSimilarEventsBySlug } from "@/lib/actions/event.actions";
 import type { IAgendaItem } from "@/database/event.model";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -13,8 +13,6 @@ import CommentSection from "@/components/CommentSection";
 import EventSponsors from "@/components/EventSponsors";
 import EventScheduleDisplay from "@/components/EventScheduleDisplay";
 
-
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
 
 const EventDetailItem = ({ icon, alt, label }: { icon: string; alt: string; label: string;}) => (
     <div className="flex items-center gap-2">
@@ -68,14 +66,10 @@ const EventTags = ({ tags }: { tags: string[] }) => (
 );
 
 async function EventContent({ slug }: { slug: string }) {
-    const request = await fetch(`${BASE_URL}/api/events/${slug}`);
-
-    if (!request.ok) {
-        notFound();
-    }
-
-    const { event, organizer } = await request.json();
-
+    // Read the event directly on the server. Calling this app's own HTTP API
+    // here depends on NEXT_PUBLIC_BASE_URL being correct in every deployment
+    // and can turn a valid event into a false not-found page.
+    const event = await getEventBySlug(slug);
     if (!event) notFound();
 
     const { 
@@ -94,7 +88,8 @@ async function EventContent({ slug }: { slug: string }) {
       city,
       state,
       country,
-      price
+      price,
+      organizer,
     } = event;
 
     const similarEvents = (await getSimilarEventsBySlug(slug)) as SimilarEvent[];
