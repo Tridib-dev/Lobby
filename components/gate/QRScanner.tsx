@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 import { CameraOff } from "lucide-react";
 import CameraPermissionDrawer from "./CameraPermissionDrawer";
 import { normalizeScanValue } from "./gate-format";
+import { describeMediaDeviceError } from "@/lib/room/media-error";
 
 export interface QRScannerProps {
   onScan: (ticketId: string) => void;
@@ -70,10 +71,8 @@ export default function QRScanner({ onScan, active }: QRScannerProps) {
         startedRef.current = true;
         if (!cancelled) setRunning(true);
       } catch (err) {
-        if (!(err instanceof Error && err.name === "NotAllowedError")) {
-          console.error("[QRScanner]", err);
-        }
-        if (!cancelled) setError(" Couldn't access camera.");
+        console.error("[QRScanner] camera start failed", err);
+        if (!cancelled) setError(describeMediaDeviceError("camera", err));
         if (!cancelled) setPermissionDrawerOpen(true);
       }
     }

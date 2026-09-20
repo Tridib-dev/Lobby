@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import { Dock, DockIcon, DockItem, DockLabel } from "@/components/ui/dock";
 import { RoomMorphStage } from "./morph-nav/RoomMorphStage";
 import type { MorphNavItem } from "./morph-nav/MorphNav";
+import { describeMediaDeviceError } from "@/lib/room/media-error";
 
 export interface LiveRoomScreenProps {
   call: Call;
@@ -765,8 +766,9 @@ function DeviceButtons({ setDeviceError }: { setDeviceError: (value: string | nu
     setDeviceError(null);
     try {
       await camera.toggle();
-    } catch {
-      setDeviceError("Camera could not be enabled. Allow camera access in the browser and check that no other app is using it.");
+    } catch (error: unknown) {
+      console.error("[LiveRoomScreen] camera toggle failed", error);
+      setDeviceError(describeMediaDeviceError("camera", error));
     }
   }
 
@@ -774,8 +776,9 @@ function DeviceButtons({ setDeviceError }: { setDeviceError: (value: string | nu
     setDeviceError(null);
     try {
       await microphone.toggle();
-    } catch {
-      setDeviceError("Microphone could not be enabled. Allow microphone access in the browser and check that no other app is using it.");
+    } catch (error: unknown) {
+      console.error("[LiveRoomScreen] microphone toggle failed", error);
+      setDeviceError(describeMediaDeviceError("microphone", error));
     }
   }
 

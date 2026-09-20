@@ -9,6 +9,7 @@ import {
   type Call,
 } from "@stream-io/video-react-sdk";
 import { Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { describeMediaDeviceError } from "@/lib/room/media-error";
 
 export interface PreJoinScreenProps {
   call: Call;
@@ -67,7 +68,8 @@ function PreJoinScreenInner({
     Promise.allSettled([camera.enable(), microphone.disable()]).then(([cameraResult]) => {
       if (!cancelled) {
         if (cameraResult.status === "rejected") {
-          setDeviceError("Camera could not be enabled. Allow camera access in the browser and check that no other app is using it.");
+          console.error("[PreJoinScreen] camera enable failed", cameraResult.reason);
+          setDeviceError(describeMediaDeviceError("camera", cameraResult.reason));
         }
         setDevicesReady(true);
       }
@@ -101,7 +103,12 @@ function PreJoinScreenInner({
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => camera.toggle()}
+              onClick={() =>
+                camera.toggle().catch((error: unknown) => {
+                  console.error("[PreJoinScreen] camera toggle failed", error);
+                  setDeviceError(describeMediaDeviceError("camera", error));
+                })
+              }
               disabled={!devicesReady || isCameraTogglePending}
               className={`flex h-11 w-11 items-center justify-center rounded-full ${
                 cameraMuted ? "bg-[#1B1F27] text-[#8891A3]" : "bg-[#4f46e5] text-[#0A0C10]"
@@ -113,7 +120,12 @@ function PreJoinScreenInner({
             </button>
             <button
               type="button"
-              onClick={() => microphone.toggle()}
+              onClick={() =>
+                microphone.toggle().catch((error: unknown) => {
+                  console.error("[PreJoinScreen] microphone toggle failed", error);
+                  setDeviceError(describeMediaDeviceError("microphone", error));
+                })
+              }
               disabled={!devicesReady || isMicTogglePending}
               className={`flex h-11 w-11 items-center justify-center rounded-full ${
                 micMuted ? "bg-[#1B1F27] text-[#8891A3]" : "bg-[#4f46e5] text-[#0A0C10]"

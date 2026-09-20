@@ -17,10 +17,10 @@ export default function CameraPermissionDrawer({
     <Drawer open={open} onOpenChange={onOpenChange} direction="bottom">
       <DrawerContent className="w-full border border-white/10 bg-[#11161d] text-white shadow-[0_24px_80px_rgba(0,0,0,0.6)] p-0 flex flex-col sm:max-w-md sm:mx-auto data-[vaul-drawer-direction=bottom]:!rounded-t-3xl data-[vaul-drawer-direction=bottom]:!mt-0 data-[vaul-drawer-direction=bottom]:!h-[72vh] data-[vaul-drawer-direction=bottom]:!max-h-[72vh]">
         <DrawerHeader className="border-b border-white/10 px-4 py-3 text-left">
-          <DrawerTitle className="text-sm font-semibold text-white/95">Camera permission needed</DrawerTitle>
+          <DrawerTitle className="text-sm font-semibold text-white/95">Camera access needed</DrawerTitle>
           <DrawerDescription className="text-xs leading-5 text-white/55">
-            The scanner can only start after this site has access to your camera.
-            If you denied permission before, you can still allow it again from your browser settings.
+            The scanner could not start the camera. Check the message above, then retry after fixing the browser or
+            device setting.
           </DrawerDescription>
         </DrawerHeader>
 
