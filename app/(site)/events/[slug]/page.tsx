@@ -130,6 +130,7 @@ async function EventContent({ slug }: { slug: string }) {
                             />
                         </div>
 
+
                         <Link
                             href={getCityLink({ city, state, country })}
                             className="flex items-center gap-2 hover:underline hover:text-blue-600 transition-colors"
