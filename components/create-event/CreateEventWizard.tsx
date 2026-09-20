@@ -141,16 +141,47 @@ const CreateEventWizard = () => {
         method: "POST",
         body: buildFormData(draft),
       });
-      const data = await response.json();
+      // Read the body as text first. Safari reports a vague
+      // "The string did not match the expected pattern" error when
+      // response.json() receives an empty or non-JSON response, hiding the
+      // actual API/deployment failure from the organizer.
+      const rawResponse = await response.text();
+      let data: {
+        message?: unknown;
+        error?: unknown;
+        event?: { slug?: unknown };
+      } = {};
+
+      if (rawResponse.trim()) {
+        try {
+          data = JSON.parse(rawResponse) as typeof data;
+        } catch {
+          throw new Error(
+            `Event creation failed (${response.status} ${response.statusText || "Invalid server response"}).`
+          );
+        }
+      }
 
       if (!response.ok) {
-        throw new Error(data?.message || data?.error || "Event creation failed.");
+        const serverMessage =
+          typeof data.message === "string"
+            ? data.message
+            : typeof data.error === "string"
+              ? data.error
+              : null;
+        throw new Error(serverMessage || `Event creation failed (${response.status}).`);
+      }
+
+      const eventSlug = typeof data.event?.slug === "string" ? data.event.slug : "";
+      if (!eventSlug) {
+        throw new Error(
+          "The server did not return the created event. Check the deployment logs before trying again."
+        );
       }
 
       toast.success("Event created — it's live now.");
       resetDraft();
-      const slug = data?.event?.slug;
-      router.push(slug ? `/events/${slug}` : "/");
+      router.push(`/events/${eventSlug}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong.";
       toast.error(message);

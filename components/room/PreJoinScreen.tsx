@@ -43,6 +43,7 @@ function PreJoinScreenInner({
   const { camera, isMute: cameraMuted, hasBrowserPermission: hasCameraPermission } = useCameraState();
   const { microphone, isMute: micMuted, hasBrowserPermission: hasMicPermission } = useMicrophoneState();
   const [devicesReady, setDevicesReady] = useState(() => !isOrganizerTier);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
 
   // Organizer tier gets a live preview by default (camera on, mic off —
   // most people don't want to broadcast audio while they're still
@@ -51,8 +52,13 @@ function PreJoinScreenInner({
   useEffect(() => {
     if (!isOrganizerTier) return;
     let cancelled = false;
-    Promise.allSettled([camera.enable(), microphone.disable()]).finally(() => {
-      if (!cancelled) setDevicesReady(true);
+    Promise.allSettled([camera.enable(), microphone.disable()]).then(([cameraResult]) => {
+      if (!cancelled) {
+        if (cameraResult.status === "rejected") {
+          setDeviceError("Camera could not be enabled. Check browser and device permissions.");
+        }
+        setDevicesReady(true);
+      }
     });
     return () => {
       cancelled = true;
@@ -113,6 +119,7 @@ function PreJoinScreenInner({
               controls bar.
             </p>
           )}
+          {deviceError && <p className="max-w-xs text-xs text-[#FF5468]">{deviceError}</p>}
         </div>
       ) : (
         <p className="max-w-xs text-sm text-[#8891A3]">

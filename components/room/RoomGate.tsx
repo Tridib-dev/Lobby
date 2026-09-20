@@ -103,8 +103,11 @@ export default function RoomGate({
       if (callRef.current === c) {
         callRef.current = null;
       }
+      // Dispose the call even when the user leaves from the pre-join screen.
+      // Stream recommends leaving every created call instance; otherwise a
+      // retry/navigation can retain stale device and permission state.
+      c.leave().catch(() => {});
       if (hasJoinedCallRef.current) {
-        c.leave().catch(() => {});
         fetch(`/api/rooms/${eventId}/leave`, { method: "POST", keepalive: true }).catch(() => {});
       }
     };
@@ -143,6 +146,7 @@ export default function RoomGate({
   }
 
   function handleRetry() {
+    callRef.current?.leave().catch(() => {});
     setJoinFailedState(false);
     setCall(null);
     setHasJoined(false);

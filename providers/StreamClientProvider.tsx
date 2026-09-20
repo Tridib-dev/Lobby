@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { StreamVideo, StreamVideoClient } from "@stream-io/video-react-sdk";
 import { useUser } from "@clerk/nextjs";
@@ -20,20 +20,18 @@ const StreamVideoProvider = ({ children }: { children: ReactNode }) => {
   const userImage = user?.imageUrl ?? undefined;
   const configError = isLoaded && userId && !apiKey ? "Stream API key is missing. Please check your environment variables." : null;
 
-  const videoClient = useMemo<StreamVideoClient | null>(() => {
-    if (!isLoaded || !userId) {
-      return null;
+  const [videoClient, setVideoClient] = useState<StreamVideoClient | null>(null);
+
+  // Stream clients own a WebSocket and device/session state. Create them in
+  // an effect and dispose them in the matching cleanup so strict-mode
+  // remounts and connection retries cannot reuse a disconnected client.
+  useEffect(() => {
+    if (!isLoaded || !userId || !apiKey || retryKey < 0) {
+      return;
     }
 
-    if (!apiKey) {
-      return null;
-    }
-
-    if (retryKey < 0) {
-      return null;
-    }
-
-    return StreamVideoClient.getOrCreateInstance({
+    let active = true;
+    const client = new StreamVideoClient({
       apiKey,
       user: {
         id: userId,
@@ -63,6 +61,20 @@ const StreamVideoProvider = ({ children }: { children: ReactNode }) => {
         },
       },
     });
+
+    // Publish the client after the effect has completed so React does not
+    // synchronously cascade another render from inside the effect body.
+    queueMicrotask(() => {
+      if (active) setVideoClient(client);
+    });
+
+    return () => {
+      active = false;
+      void client.disconnectUser().catch((error: unknown) => {
+        console.error("[StreamVideoProvider] disconnect failed", error);
+      });
+      setVideoClient((current) => (current === client ? null : current));
+    };
   }, [isLoaded, retryKey, userId, userName, userImage]);
 
   const connectedUser = useSyncExternalStore(
@@ -82,12 +94,6 @@ const StreamVideoProvider = ({ children }: { children: ReactNode }) => {
     () => videoClient?.state.connectedUser,
     () => undefined,
   );
-
-  useEffect(() => {
-    return () => {
-      videoClient?.disconnectUser();
-    };
-  }, [videoClient]);
 
   useEffect(() => {
     if (!isLoaded || userId) return;
