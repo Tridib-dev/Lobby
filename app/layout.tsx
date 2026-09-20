@@ -3,6 +3,12 @@
 
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+import "@fontsource/jetbrains-mono/700.css";
 import "./globals.css";
 import { Toaster } from "sonner";
 

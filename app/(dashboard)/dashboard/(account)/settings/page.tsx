@@ -2,6 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/shell";
 import SettingsForm from "@/components/dashboard/settings-form";
+import { connection } from "next/server";
 
 export const metadata = { title: "Settings — DevEvent" };
 
@@ -17,6 +18,7 @@ type SettingsMetadata = {
 };
 
 export default async function SettingsPage() {
+    await connection();
     const user = await currentUser();
     if (!user) redirect("/sign-in");
 

@@ -41,20 +41,14 @@ export default function DashboardShell({
         main.scrollLeft = 0;
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 
-        const raf1 = requestAnimationFrame(() => {
-            main.scrollTop = 0;
-            main.scrollLeft = 0;
-            window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-        });
-        const raf2 = requestAnimationFrame(() => {
+        const raf = requestAnimationFrame(() => {
             main.scrollTop = 0;
             main.scrollLeft = 0;
             window.scrollTo({ top: 0, left: 0, behavior: "auto" });
         });
 
         return () => {
-            cancelAnimationFrame(raf1);
-            cancelAnimationFrame(raf2);
+            cancelAnimationFrame(raf);
         };
     }, [pathname]);
 
@@ -95,7 +89,7 @@ export default function DashboardShell({
                                 initial={{ opacity: 0, y: 6 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -6 }}
-                                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                                 className="w-full px-3.5 pb-20 pt-5 sm:px-5 lg:px-7 xl:px-9"
                             >
                                 <div className="space-y-8">

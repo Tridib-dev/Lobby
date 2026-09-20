@@ -12,6 +12,7 @@ import { User } from "@/database/User.model";
 import { Event } from "@/database/event.model";
 import { CoOrganizer } from "@/database/coOrganizer.model";
 import { getEventStartUTC } from "../time";
+import { connection } from "next/server";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,7 @@ function categorize(
 // Merges free bookings + paid orders into one unified ticket list
 
 export const getUserTickets = cache(async (): Promise<TicketItem[]> => {
+    await connection();
     try {
         const { userId } = await auth();
         if (!userId) return [];
@@ -230,6 +232,7 @@ export const getUserTickets = cache(async (): Promise<TicketItem[]> => {
 });
 
 export const getUserPaymentIssues = cache(async (): Promise<PaymentIssueItem[]> => {
+    await connection();
     try {
         const { userId } = await auth();
         if (!userId) return [];
@@ -262,6 +265,7 @@ export const getUserPaymentIssues = cache(async (): Promise<PaymentIssueItem[]> 
 // ─── getUserStats ──────────────────────────────────────────────────────────────
 
 export const getUserStats = cache(async (): Promise<UserStats> => {
+    await connection();
     try {
         const { userId } = await auth();
         if (!userId) return { attended: 0, organized: 0, saved: 0, totalSpent: 0 };
@@ -354,6 +358,7 @@ async function buildOrganizedEventItems(events: any[]): Promise<OrganizedEventIt
 // ─── getOrganizedEvents ────────────────────────────────────────────────────────
 
 export const getOrganizedEvents = cache(async (): Promise<OrganizedEventItem[]> => {
+    await connection();
     try {
         const { userId } = await auth();
         if (!userId) return [];
@@ -374,6 +379,7 @@ export const getOrganizedEvents = cache(async (): Promise<OrganizedEventItem[]> 
 // ─── getCoOrganizedEvents ──────────────────────────────────────────────────────
 
 export const getCoOrganizedEvents = cache(async (): Promise<OrganizedEventItem[]> => {
+    await connection();
     try {
         const { userId } = await auth();
         if (!userId) return [];

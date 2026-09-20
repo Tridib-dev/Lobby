@@ -7,6 +7,7 @@ import imagekit from "@/lib/imagekit";
 import { type EventCategory } from "@/lib/constants/event-categories";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { validateEmails } from "@/lib/validateemail";
 import { slugifySegment } from "@/lib/seo-events";
 import { auth, clerkClient } from "@clerk/nextjs/server";
@@ -325,11 +326,20 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            await notifyFollowersOfNewEvent({
-                creatorClerkId: userId,
-                eventId: create_event._id.toString(),
-                eventSlug: create_event.slug,
-                eventTitle: create_event.title,
+            // Notifications are a side effect, not part of publishing. Do not
+            // make a successfully-created event look like a failed request if
+            // an email/database notification is slow or unavailable.
+            after(async () => {
+                try {
+                    await notifyFollowersOfNewEvent({
+                        creatorClerkId: userId,
+                        eventId: create_event._id.toString(),
+                        eventSlug: create_event.slug,
+                        eventTitle: create_event.title,
+                    });
+                } catch (notificationError) {
+                    console.error("New-event notification failed:", notificationError);
+                }
             });
 
             revalidateTag("events", "default");
@@ -338,7 +348,7 @@ export async function POST(req: NextRequest) {
             }
             return NextResponse.json({
                 message: 'Event Created Successfully',
-                event: create_event,
+                event: JSON.parse(JSON.stringify(create_event)),
                 isFirstEvent,
             }, { status: 201 });
 
