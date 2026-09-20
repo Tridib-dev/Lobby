@@ -1,4 +1,4 @@
-import { City, State } from "country-state-city";
+import { City } from "country-state-city";
 import tzLookup from "tz-lookup";
 
 
@@ -40,7 +40,7 @@ async function fetchFromGeoNames(
     });
 
     const res = await fetch(
-      `https://api.geonames.org/searchJSON?${params.toString()}`,
+      `https://secure.geonames.org/searchJSON?${params.toString()}`,
       { signal: AbortSignal.timeout(4000) }
     );
 
@@ -48,7 +48,33 @@ async function fetchFromGeoNames(
     console.log("GEONAMES RAW RESPONSE:", JSON.stringify(data)); // TEMPORARY
 
     if (!res.ok) return null;
-    return data?.geonames?.[0]?.timezone?.timeZoneId ?? null;
+
+    const place = data?.geonames?.[0];
+    const directTimezone = place?.timezone?.timeZoneId;
+    if (typeof directTimezone === "string" && directTimezone) {
+      return directTimezone;
+    }
+
+    // searchJSON commonly returns coordinates but not the timezone object.
+    // Ask GeoNames' timezone endpoint for the timezone at those coordinates.
+    const latitude = Number(place?.lat);
+    const longitude = Number(place?.lng);
+    if (!hasValidCoordinates(latitude, longitude)) return null;
+
+    const timezoneParams = new URLSearchParams({
+      lat: String(latitude),
+      lng: String(longitude),
+      username,
+    });
+    const timezoneResponse = await fetch(
+      `https://secure.geonames.org/timezoneJSON?${timezoneParams.toString()}`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!timezoneResponse.ok) return null;
+
+    const timezoneData = await timezoneResponse.json();
+    const timezone = timezoneData?.timezoneId;
+    return typeof timezone === "string" && timezone ? timezone : null;
   } catch (err) {
     console.log("GEONAMES ERROR:", err); // TEMPORARY
     return null;
