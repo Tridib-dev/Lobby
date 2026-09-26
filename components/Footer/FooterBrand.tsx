@@ -34,7 +34,7 @@ const FooterBrand = () => {
     return (
         <div className="footer-brand">
             <Link href="/" className="footer-logo">
-                <Image src="/icons/logo.png" alt="DevEvent" width={32} height={32} />
+                <Image src="/icons/logo.svg" alt="DevEvent" width={32} height={32} className="h-8 w-8" />
                 <span>DevEvent</span>
             </Link>
             <p className="footer-tagline">

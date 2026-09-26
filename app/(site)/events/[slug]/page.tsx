@@ -12,6 +12,7 @@ import StickyBookingBar from "@/components/BookEvent";
 import CommentSection from "@/components/CommentSection";
 import EventSponsors from "@/components/EventSponsors";
 import EventScheduleDisplay from "@/components/EventScheduleDisplay";
+import EventHero, { type EventHeroData } from "@/components/event_page/hero/EventHero";
 
 
 const EventDetailItem = ({ icon, alt, label }: { icon: string; alt: string; label: string;}) => (
@@ -94,12 +95,30 @@ async function EventContent({ slug }: { slug: string }) {
 
     const similarEvents = (await getSimilarEventsBySlug(slug)) as SimilarEvent[];
 
+    const isSoldOut = event.capacity != null
+        && (event.confirmedRegistrationCount ?? 0) + (event.reservedRegistrationCount ?? 0) >= event.capacity;
+
+    const heroEvent: EventHeroData = {
+        title: event.title,
+        subtitle: description,
+        image,
+        category,
+        price: price ?? 0,
+        isFree: event.isFree ?? (price ?? 0) <= 0,
+        availabilityState: isSoldOut ? "sold-out" : "open",
+        availabilityLabel: isSoldOut ? "SOLD OUT" : "REGISTRATION OPEN",
+        date,
+        time,
+        timezone: event.timezone,
+        startAtUTC: event.startAtUTC,
+        location,
+        mode,
+        audience: Array.isArray(audience) ? audience : [],
+    };
+
     return (
         <>
-            <div>
-                <h1>Event Description</h1>
-                <p>{description}</p>
-            </div>
+            <EventHero event={heroEvent} />
 
             <div className="details">
                 <div className="content">
